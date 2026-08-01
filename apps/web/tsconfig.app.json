@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "@escala-app/core": ["../../packages/core/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,20 @@
+{
+  "name": "@escala-app/core",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.4"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
+  }
+}
