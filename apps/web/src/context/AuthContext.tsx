@@ -1,25 +1,41 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { obterMeuPerfil, type Perfil } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 
 interface AuthContextValue {
   session: Session | null;
+  perfil: Perfil | null;
+  /** true enquanto a sessão OU o perfil ainda estão carregando. */
   carregando: boolean;
   entrarComSenha: (email: string, senha: string) => Promise<{ erro: string | null }>;
   enviarLinkMagico: (email: string) => Promise<{ erro: string | null }>;
   sair: () => Promise<void>;
+  recarregarPerfil: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
-  const [carregando, setCarregando] = useState(true);
+  const [perfil, setPerfil] = useState<Perfil | null>(null);
+  const [carregandoSessao, setCarregandoSessao] = useState(true);
+  const [carregandoPerfil, setCarregandoPerfil] = useState(false);
+
+  const recarregarPerfil = useCallback(async () => {
+    setCarregandoPerfil(true);
+    try {
+      const perfilAtual = await obterMeuPerfil(supabase);
+      setPerfil(perfilAtual);
+    } finally {
+      setCarregandoPerfil(false);
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
-      setCarregando(false);
+      setCarregandoSessao(false);
     });
 
     const { data: subscription } = supabase.auth.onAuthStateChange((_evento, novaSession) => {
@@ -28,6 +44,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => subscription.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (session) {
+      void recarregarPerfil();
+    } else {
+      setPerfil(null);
+    }
+  }, [session, recarregarPerfil]);
 
   async function entrarComSenha(email: string, senha: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
@@ -43,8 +67,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   }
 
+  const carregando = carregandoSessao || (!!session && carregandoPerfil && !perfil);
+
   return (
-    <AuthContext.Provider value={{ session, carregando, entrarComSenha, enviarLinkMagico, sair }}>
+    <AuthContext.Provider
+      value={{ session, perfil, carregando, entrarComSenha, enviarLinkMagico, sair, recarregarPerfil }}
+    >
       {children}
     </AuthContext.Provider>
   );
