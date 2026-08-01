@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "../supabase.js";
-import type { Escala, StatusEscala } from "../types.js";
+import type { Escala, StatusEscala, StatusConfirmacao } from "../types.js";
+import type { ContextoValidacaoEscalacao, EscalacaoExistente } from "../regras.js";
+import { mesmoMes } from "../regras.js";
+import { listarIndisponibilidades } from "./indisponibilidades.js";
+import { obterRegrasMinisterio } from "./regras-ministerio.js";
 
 interface EscalaRow {
   id: string;
@@ -206,4 +210,120 @@ export async function listarMinhasEscalacoes(client: SupabaseClient, perfilId: s
   });
 
   return resultado.sort((a, b) => a.dataHora.localeCompare(b.dataHora));
+}
+
+/** A própria pessoa confirma ou recusa presença numa escalação já publicada. */
+export async function confirmarPresenca(
+  client: SupabaseClient,
+  escalacaoId: string,
+  confirmacao: Extract<StatusConfirmacao, "confirmado" | "recusado">,
+): Promise<void> {
+  const { error } = await client
+    .from("escalacoes")
+    .update({ confirmacao, respondido_em: new Date().toISOString() })
+    .eq("id", escalacaoId);
+  if (error) throw error;
+}
+
+export interface ParametrosContextoValidacao {
+  pessoaId: string;
+  ministerioId: string;
+  funcaoId: string;
+  dataEvento: string; // ISO date do evento sendo escalado
+  eventoId: string;
+  escalaId: string;
+}
+
+interface EscalacaoDaPessoaRow {
+  escala_id: string;
+  escalas:
+    | { ministerio_id: string; evento_id: string; eventos: { data_hora: string } | { data_hora: string }[] | null }
+    | {
+        ministerio_id: string;
+        evento_id: string;
+        eventos: { data_hora: string } | { data_hora: string }[] | null;
+      }[]
+    | null;
+}
+
+/**
+ * Monta o contexto necessário para `validarEscalacao` consultando o banco:
+ * vínculo com o ministério, indisponibilidades, quem mais está na mesma
+ * função, conflitos com outros ministérios no mesmo evento, quantidade de
+ * escalações no mês e a última vez que a pessoa serviu neste ministério.
+ */
+export async function obterContextoValidacaoEscalacao(
+  client: SupabaseClient,
+  params: ParametrosContextoValidacao,
+): Promise<ContextoValidacaoEscalacao> {
+  const { pessoaId, ministerioId, funcaoId, dataEvento, eventoId, escalaId } = params;
+
+  const [membroRes, indisponibilidades, outrasRes, escalacoesDaPessoaRes, regras] = await Promise.all([
+    client
+      .from("membros_ministerio")
+      .select("id")
+      .eq("ministerio_id", ministerioId)
+      .eq("perfil_id", pessoaId)
+      .eq("ativo", true)
+      .maybeSingle(),
+    listarIndisponibilidades(client, pessoaId),
+    client.from("escalacoes").select("perfil_id").eq("escala_id", escalaId).eq("funcao_id", funcaoId),
+    client
+      .from("escalacoes")
+      .select("escala_id, escalas!inner(ministerio_id, evento_id, eventos!inner(data_hora))")
+      .eq("perfil_id", pessoaId),
+    obterRegrasMinisterio(client, ministerioId),
+  ]);
+
+  if (membroRes.error) throw membroRes.error;
+  if (outrasRes.error) throw outrasRes.error;
+  if (escalacoesDaPessoaRes.error) throw escalacoesDaPessoaRes.error;
+
+  const outrasPessoasNaMesmaFuncao = ((outrasRes.data ?? []) as { perfil_id: string }[]).map((linha) => ({
+    pessoaId: linha.perfil_id,
+  }));
+
+  const dataEventoMs = new Date(dataEvento).getTime();
+  const escalacoesEmOutrosMinisteriosNoEvento: EscalacaoExistente[] = [];
+  let escalacoesDaPessoaNoMesNesteMinisterio = 0;
+  let dataUltimaEscalacaoNesteMinisterio: string | null = null;
+
+  for (const linha of (escalacoesDaPessoaRes.data ?? []) as unknown as EscalacaoDaPessoaRow[]) {
+    const escala = Array.isArray(linha.escalas) ? (linha.escalas[0] ?? null) : linha.escalas;
+    if (!escala) continue;
+    const evento = Array.isArray(escala.eventos) ? (escala.eventos[0] ?? null) : escala.eventos;
+    const dataHoraEvento = evento?.data_hora ?? null;
+
+    if (escala.evento_id === eventoId && escala.ministerio_id !== ministerioId) {
+      escalacoesEmOutrosMinisteriosNoEvento.push({ pessoaId, ministerioId: escala.ministerio_id, dataEvento });
+    }
+
+    if (escala.ministerio_id === ministerioId && dataHoraEvento) {
+      if (mesmoMes(dataEvento, dataHoraEvento)) {
+        escalacoesDaPessoaNoMesNesteMinisterio += 1;
+      }
+      const dataHoraEventoMs = new Date(dataHoraEvento).getTime();
+      if (
+        dataHoraEventoMs < dataEventoMs &&
+        (dataUltimaEscalacaoNesteMinisterio === null ||
+          dataHoraEventoMs > new Date(dataUltimaEscalacaoNesteMinisterio).getTime())
+      ) {
+        dataUltimaEscalacaoNesteMinisterio = dataHoraEvento;
+      }
+    }
+  }
+
+  return {
+    pessoaId,
+    ministerioId,
+    funcaoId,
+    dataEvento,
+    pessoaPertenceAoMinisterio: !!membroRes.data,
+    indisponibilidades,
+    outrasPessoasNaMesmaFuncao,
+    escalacoesEmOutrosMinisteriosNoEvento,
+    escalacoesDaPessoaNoMesNesteMinisterio,
+    dataUltimaEscalacaoNesteMinisterio,
+    regras,
+  };
 }

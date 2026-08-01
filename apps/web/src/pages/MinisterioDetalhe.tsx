@@ -8,12 +8,15 @@ import {
   listarMembrosDoMinisterio,
   listarPerfisDaIgreja,
   obterMinisterio,
+  obterRegrasMinisterio,
   removerMembro,
+  salvarRegrasMinisterio,
   type Funcao,
   type MembroMinisterioComPerfil,
   type Ministerio,
   type PapelMinisterio,
   type Perfil,
+  type RegraMinisterio,
 } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -27,6 +30,7 @@ export function MinisterioDetalhe() {
   const [membros, setMembros] = useState<MembroMinisterioComPerfil[]>([]);
   const [funcoes, setFuncoes] = useState<Funcao[]>([]);
   const [perfisDaIgreja, setPerfisDaIgreja] = useState<Perfil[]>([]);
+  const [regras, setRegras] = useState<RegraMinisterio | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagem, setMensagem] = useState<string | null>(null);
@@ -37,6 +41,11 @@ export function MinisterioDetalhe() {
   const [emailConvite, setEmailConvite] = useState("");
   const [nomeConvite, setNomeConvite] = useState("");
   const [enviandoConvite, setEnviandoConvite] = useState(false);
+
+  const [maxEscalasMes, setMaxEscalasMes] = useState("");
+  const [intervaloMinDias, setIntervaloMinDias] = useState("");
+  const [bloquearConflito, setBloquearConflito] = useState(false);
+  const [salvandoRegras, setSalvandoRegras] = useState(false);
 
   const souLider = useMemo(() => {
     if (!perfil) return false;
@@ -49,14 +58,19 @@ export function MinisterioDetalhe() {
     setCarregando(true);
     setErro(null);
     try {
-      const [ministerioCarregado, membrosCarregados, funcoesCarregadas] = await Promise.all([
+      const [ministerioCarregado, membrosCarregados, funcoesCarregadas, regrasCarregadas] = await Promise.all([
         obterMinisterio(supabase, id),
         listarMembrosDoMinisterio(supabase, id),
         listarFuncoes(supabase, id),
+        obterRegrasMinisterio(supabase, id),
       ]);
       setMinisterio(ministerioCarregado);
       setMembros(membrosCarregados);
       setFuncoes(funcoesCarregadas);
+      setRegras(regrasCarregadas);
+      setMaxEscalasMes(regrasCarregadas?.maxEscalasMes?.toString() ?? "");
+      setIntervaloMinDias(regrasCarregadas?.intervaloMinDias?.toString() ?? "");
+      setBloquearConflito(regrasCarregadas?.bloquearConflitoEvento ?? false);
       setPerfisDaIgreja(await listarPerfisDaIgreja(supabase, perfil.igrejaId));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível carregar o ministério.");
@@ -136,6 +150,27 @@ export function MinisterioDetalhe() {
       await carregar();
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível remover a pessoa.");
+    }
+  }
+
+  async function handleSalvarRegras(event: FormEvent) {
+    event.preventDefault();
+    if (!id) return;
+    setSalvandoRegras(true);
+    setErro(null);
+    setMensagem(null);
+    try {
+      const salvas = await salvarRegrasMinisterio(supabase, id, {
+        maxEscalasMes: maxEscalasMes.trim() ? Number(maxEscalasMes) : null,
+        intervaloMinDias: intervaloMinDias.trim() ? Number(intervaloMinDias) : null,
+        bloquearConflitoEvento: bloquearConflito,
+      });
+      setRegras(salvas);
+      setMensagem("Regras da escala salvas.");
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível salvar as regras.");
+    } finally {
+      setSalvandoRegras(false);
     }
   }
 
@@ -295,6 +330,57 @@ export function MinisterioDetalhe() {
           </form>
         )}
       </section>
+
+      {souLider && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-slate-700">Regras da escala</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Esses limites geram avisos ao montar a escala — o líder decide se segue em frente mesmo assim.
+          </p>
+          <form
+            onSubmit={handleSalvarRegras}
+            className="mt-4 grid gap-4 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-3"
+          >
+            <label className="text-sm text-slate-600">
+              Máx. de escalas por mês
+              <input
+                type="number"
+                min={1}
+                placeholder="Sem limite"
+                value={maxEscalasMes}
+                onChange={(event) => setMaxEscalasMes(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="text-sm text-slate-600">
+              Intervalo mínimo (dias)
+              <input
+                type="number"
+                min={1}
+                placeholder="Sem limite"
+                value={intervaloMinDias}
+                onChange={(event) => setIntervaloMinDias(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+            </label>
+            <label className="flex items-center gap-2 self-end text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={bloquearConflito}
+                onChange={(event) => setBloquearConflito(event.target.checked)}
+              />
+              Impedir (não só avisar) conflito com outro ministério no mesmo evento
+            </label>
+            <button
+              type="submit"
+              disabled={salvandoRegras}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50 sm:col-span-3 sm:w-fit"
+            >
+              {salvandoRegras ? "Salvando..." : "Salvar regras"}
+            </button>
+          </form>
+        </section>
+      )}
     </Layout>
   );
 }

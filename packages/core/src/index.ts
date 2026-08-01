@@ -9,3 +9,5 @@ export * from "./api/funcoes.js";
 export * from "./api/membros.js";
 export * from "./api/eventos.js";
 export * from "./api/escalas.js";
+export * from "./api/indisponibilidades.js";
+export * from "./api/regras-ministerio.js";

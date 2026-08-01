@@ -26,6 +26,12 @@ export function Layout({ children }: { children: ReactNode }) {
             <NavLink to="/eventos" className={({ isActive }) => `${linkBase} ${isActive ? linkAtivo : linkInativo}`}>
               Eventos
             </NavLink>
+            <NavLink
+              to="/disponibilidade"
+              className={({ isActive }) => `${linkBase} ${isActive ? linkAtivo : linkInativo}`}
+            >
+              Disponibilidade
+            </NavLink>
           </nav>
           <div className="flex items-center gap-4">
             <span className="hidden text-sm text-slate-500 sm:inline">

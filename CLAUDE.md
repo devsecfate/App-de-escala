@@ -2,6 +2,20 @@
 
 Memória de trabalho do projeto App de Escala. Leia este arquivo primeiro para pegar o contexto rápido; os detalhes completos ficam em `memoria/memoria.md`.
 
+## Estado atual (2026-08-01)
+
+- Fase 0 (fundação técnica), Fase 1 (MVP da escala) e Fase 2 (disponibilidade e confirmação) implementadas. Fases 0 e 1 já publicadas em https://github.com/devsecfate/App-de-escala (branch `main`); Fase 2 ainda não commitada. Detalhes em `memoria/memoria.md`.
+- Fase 2 entregou: tela "Minha disponibilidade" (`/disponibilidade`), confirmar/recusar presença em "Minhas escalas", painel do líder com status de confirmação em "Montar escala", regras do ministério configuráveis (`MinisterioDetalhe`), e `validarEscalacao` agora é chamado de verdade antes de salvar uma escalação (bloqueios impedem, avisos só informam). Não precisou de migration nova — `indisponibilidades`, `escalacoes.confirmacao` e `regras_ministerio` já existiam desde a Fase 0.
+- Próximo passo: **Fase 3** — texto pronto + WhatsApp, push do PWA, lembrete de véspera.
+- Pendência técnica: nunca foi testado ponta a ponta contra Postgres real — Docker Desktop está instalado mas não roda por padrão (precisa `npx supabase start` com o Docker aberto). A Fase 2 só foi validada por `npm test` (motor de regras) e `npm run build` (typecheck), não contra o banco real.
+- Deploy (Vercel / Supabase cloud) ainda não foi feito, depende do usuário logar nessas contas.
+
+## Como trabalhar neste projeto
+
+- Perguntar antes de fazer commit/push, mesmo que já tenha sido autorizado antes — cada vez é uma autorização nova.
+- Perguntar antes de criar recursos em contas externas (Supabase cloud, Vercel).
+- Seguir os documentos em `planejamento/` como fonte de verdade de produto/arquitetura.
+
 ## O que é o app
 
 App para organizar a escala de pessoas que servem na igreja, separadas por ministério, deixando o processo mais simples e organizado.
@@ -27,4 +41,4 @@ App para organizar a escala de pessoas que servem na igreja, separadas por minis
 
 ## Pendências
 
-(nenhuma registrada ainda)
+Ver seção "Estado atual" no topo deste arquivo.

@@ -5,10 +5,12 @@ import {
   funcoesObrigatoriasFaltando,
   listarEscalacoesPorFuncao,
   listarMembrosDoMinisterio,
+  obterContextoValidacaoEscalacao,
   obterEvento,
   obterMinisterio,
   obterOuCriarEscala,
   publicarEscala,
+  validarEscalacao,
   type Escala,
   type EscalacaoDaFuncao,
   type Evento,
@@ -29,6 +31,18 @@ function formatarDataHora(iso: string): string {
   });
 }
 
+function rotuloConfirmacao(confirmacao: string | null): { texto: string; classe: string } | null {
+  if (!confirmacao) return null;
+  if (confirmacao === "confirmado") return { texto: "Confirmado", classe: "bg-emerald-100 text-emerald-700" };
+  if (confirmacao === "recusado") return { texto: "Não vai", classe: "bg-red-100 text-red-700" };
+  return { texto: "Aguardando confirmação", classe: "bg-amber-100 text-amber-700" };
+}
+
+interface MensagensValidacao {
+  bloqueios: string[];
+  avisos: string[];
+}
+
 export function MontarEscala() {
   const { eventoId, ministerioId } = useParams<{ eventoId: string; ministerioId: string }>();
   const { perfil } = useAuth();
@@ -41,6 +55,7 @@ export function MontarEscala() {
   const [carregando, setCarregando] = useState(true);
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [mensagensPorFuncao, setMensagensPorFuncao] = useState<Record<string, MensagensValidacao>>({});
 
   async function carregar() {
     if (!eventoId || !ministerioId || !perfil) return;
@@ -72,10 +87,36 @@ export function MontarEscala() {
   }, [eventoId, ministerioId, perfil?.id]);
 
   async function handleAlterarEscalacao(funcaoId: string, perfilId: string) {
-    if (!escala) return;
+    if (!escala || !evento || !ministerioId) return;
+    setErro(null);
+    setMensagensPorFuncao((atual) => ({ ...atual, [funcaoId]: { bloqueios: [], avisos: [] } }));
     try {
+      if (perfilId) {
+        const contexto = await obterContextoValidacaoEscalacao(supabase, {
+          pessoaId: perfilId,
+          ministerioId,
+          funcaoId,
+          dataEvento: evento.dataHora.slice(0, 10),
+          eventoId: evento.id,
+          escalaId: escala.id,
+        });
+        const resultado = validarEscalacao(contexto);
+        if (resultado.bloqueios.length > 0) {
+          setMensagensPorFuncao((atual) => ({
+            ...atual,
+            [funcaoId]: { bloqueios: resultado.bloqueios.map((b) => b.mensagem), avisos: [] },
+          }));
+          return;
+        }
+        if (resultado.avisos.length > 0) {
+          setMensagensPorFuncao((atual) => ({
+            ...atual,
+            [funcaoId]: { bloqueios: [], avisos: resultado.avisos.map((a) => a.mensagem) },
+          }));
+        }
+      }
       await definirEscalacao(supabase, escala.id, funcaoId, perfilId || null);
-      setLinhas(await listarEscalacoesPorFuncao(supabase, escala.id, ministerioId!));
+      setLinhas(await listarEscalacoesPorFuncao(supabase, escala.id, ministerioId));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível salvar a escalação.");
     }
@@ -141,26 +182,50 @@ export function MontarEscala() {
         </p>
       ) : (
         <ul className="mt-6 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
-          {linhas.map((linha) => (
-            <li key={linha.funcaoId} className="flex items-center justify-between gap-4 px-4 py-3">
-              <div>
-                <p className="text-sm font-medium text-slate-900">{linha.funcaoNome}</p>
-                {linha.obrigatoria && <p className="text-xs text-amber-600">obrigatória</p>}
-              </div>
-              <select
-                value={linha.perfilId ?? ""}
-                onChange={(event) => void handleAlterarEscalacao(linha.funcaoId, event.target.value)}
-                className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-              >
-                <option value="">Ninguém escalado</option>
-                {membros.map((membro) => (
-                  <option key={membro.perfilId} value={membro.perfilId}>
-                    {membro.nome}
-                  </option>
+          {linhas.map((linha) => {
+            const mensagens = mensagensPorFuncao[linha.funcaoId];
+            const confirmacao = rotuloConfirmacao(linha.confirmacao);
+            return (
+              <li key={linha.funcaoId} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium text-slate-900">{linha.funcaoNome}</p>
+                    {linha.obrigatoria && <p className="text-xs text-amber-600">obrigatória</p>}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {confirmacao && (
+                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${confirmacao.classe}`}>
+                        {confirmacao.texto}
+                      </span>
+                    )}
+                    <select
+                      value={linha.perfilId ?? ""}
+                      onChange={(event) => void handleAlterarEscalacao(linha.funcaoId, event.target.value)}
+                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                    >
+                      <option value="">Ninguém escalado</option>
+                      {membros.map((membro) => (
+                        <option key={membro.perfilId} value={membro.perfilId}>
+                          {membro.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {mensagens?.bloqueios.map((mensagem, indice) => (
+                  <p key={`b-${indice}`} className="mt-1.5 text-xs text-red-600">
+                    {mensagem}
+                  </p>
                 ))}
-              </select>
-            </li>
-          ))}
+                {mensagens?.avisos.map((mensagem, indice) => (
+                  <p key={`a-${indice}`} className="mt-1.5 text-xs text-amber-600">
+                    {mensagem}
+                  </p>
+                ))}
+              </li>
+            );
+          })}
         </ul>
       )}
 
