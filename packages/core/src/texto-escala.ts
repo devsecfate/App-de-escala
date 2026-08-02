@@ -11,12 +11,23 @@ export interface ItemEscalaTexto {
   pessoaNome: string | null;
 }
 
+/** Uma música do cronograma do culto (Fase 4), já na ordem. */
+export interface ItemCronogramaTexto {
+  titulo: string;
+  /** tom escolhido para este culto; caindo para o tom padrão da música */
+  tom?: string | null;
+  /** momento do culto (ex: Abertura, Ceia) */
+  momento?: string | null;
+}
+
 export interface DadosEscalaTexto {
   ministerioNome: string;
   eventoTitulo: string;
   /** ISO 8601 do evento */
   dataHora: string;
   itens: ItemEscalaTexto[];
+  /** cronograma de louvor; vazio ou ausente omite a seção inteira */
+  cronograma?: ItemCronogramaTexto[];
   observacoes?: string | null;
   /** IANA (ex: America/Sao_Paulo); ausente = fuso do dispositivo */
   fusoHorario?: string;
@@ -59,6 +70,15 @@ export function gerarTextoEscala(dados: DadosEscalaTexto): string {
     for (const item of dados.itens) {
       linhas.push(`${item.funcaoNome}: ${item.pessoaNome ?? SEM_NINGUEM}`);
     }
+  }
+
+  if (dados.cronograma && dados.cronograma.length > 0) {
+    linhas.push("", "*Repertório*");
+    dados.cronograma.forEach((musica, indice) => {
+      const detalhes = [musica.tom?.trim(), musica.momento?.trim()].filter(Boolean);
+      const sufixo = detalhes.length > 0 ? ` (${detalhes.join(" · ")})` : "";
+      linhas.push(`${indice + 1}. ${musica.titulo}${sufixo}`);
+    });
   }
 
   if (dados.observacoes?.trim()) {

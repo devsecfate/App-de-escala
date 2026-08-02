@@ -57,6 +57,37 @@ describe("gerarTextoEscala", () => {
   });
 });
 
+describe("gerarTextoEscala — repertório", () => {
+  it("lista o cronograma numerado, com tom e momento", () => {
+    const texto = gerarTextoEscala(
+      dadosBase({
+        cronograma: [
+          { titulo: "Grande é o Senhor", tom: "G", momento: "Abertura" },
+          { titulo: "Bondade de Deus", tom: "D", momento: null },
+        ],
+      }),
+    );
+
+    expect(texto).toContain("*Repertório*");
+    expect(texto).toContain("1. Grande é o Senhor (G · Abertura)");
+    expect(texto).toContain("2. Bondade de Deus (D)");
+  });
+
+  it("mostra só o título quando não há tom nem momento", () => {
+    const texto = gerarTextoEscala({
+      ...dadosBase(),
+      cronograma: [{ titulo: "Santo Espírito" }],
+    });
+    expect(texto).toContain("1. Santo Espírito");
+    expect(texto).not.toContain("Santo Espírito (");
+  });
+
+  it("omite a seção inteira quando o ministério não usa repertório", () => {
+    expect(gerarTextoEscala(dadosBase())).not.toContain("*Repertório*");
+    expect(gerarTextoEscala(dadosBase({ cronograma: [] }))).not.toContain("*Repertório*");
+  });
+});
+
 describe("linkWhatsApp", () => {
   it("escapa quebras de linha e acentos no parâmetro text", () => {
     const link = linkWhatsApp("Louvor\nViolão: João");

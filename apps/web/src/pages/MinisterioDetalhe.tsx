@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   adicionarMembroExistente,
   criarFuncao,
@@ -192,7 +192,15 @@ export function MinisterioDetalhe() {
 
   return (
     <Layout>
-      <h1 className="text-lg font-semibold text-slate-900">{ministerio.nome}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-lg font-semibold text-slate-900">{ministerio.nome}</h1>
+        <Link
+          to={`/ministerios/${ministerio.id}/repertorio`}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+        >
+          Repertório
+        </Link>
+      </div>
 
       {erro && <p className="mt-4 text-sm text-red-600">{erro}</p>}
       {mensagem && <p className="mt-4 text-sm text-emerald-600">{mensagem}</p>}

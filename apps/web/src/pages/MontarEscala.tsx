@@ -1,12 +1,21 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import {
+  adicionarItemCronograma,
+  atualizarItemCronograma,
   definirEscalacao,
   funcoesObrigatoriasFaltando,
   gerarTextoEscala,
   linkWhatsApp,
+  listarCategoriasMusica,
+  listarCronograma,
   listarEscalacoesPorFuncao,
   listarMembrosDoMinisterio,
+  listarMusicas,
+  moverItem,
+  proximaOrdem,
+  removerItemCronograma,
+  salvarOrdemCronograma,
   obterContextoValidacaoEscalacao,
   obterEvento,
   obterMinisterio,
@@ -15,12 +24,15 @@ import {
   publicarEscala,
   registrarEnvio,
   validarEscalacao,
+  type CategoriaMusica,
   type Envio,
   type Escala,
   type EscalacaoDaFuncao,
   type Evento,
+  type ItemCronograma,
   type MembroMinisterioComPerfil,
   type Ministerio,
+  type Musica,
 } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -62,6 +74,10 @@ export function MontarEscala() {
   const [erro, setErro] = useState<string | null>(null);
   const [mensagensPorFuncao, setMensagensPorFuncao] = useState<Record<string, MensagensValidacao>>({});
   const [ultimoEnvio, setUltimoEnvio] = useState<Envio | null>(null);
+  const [cronograma, setCronograma] = useState<ItemCronograma[]>([]);
+  const [repertorio, setRepertorio] = useState<Musica[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaMusica[]>([]);
+  const [musicaParaAdicionar, setMusicaParaAdicionar] = useState("");
 
   async function carregar() {
     if (!eventoId || !ministerioId || !perfil) return;
@@ -79,12 +95,19 @@ export function MontarEscala() {
 
       const escalaAtual = await obterOuCriarEscala(supabase, eventoId, ministerioId, perfil.id);
       setEscala(escalaAtual);
-      const [linhasCarregadas, envioCarregado] = await Promise.all([
-        listarEscalacoesPorFuncao(supabase, escalaAtual.id, ministerioId),
-        obterUltimoEnvio(supabase, escalaAtual.id),
-      ]);
+      const [linhasCarregadas, envioCarregado, cronogramaCarregado, repertorioCarregado, categoriasCarregadas] =
+        await Promise.all([
+          listarEscalacoesPorFuncao(supabase, escalaAtual.id, ministerioId),
+          obterUltimoEnvio(supabase, escalaAtual.id),
+          listarCronograma(supabase, escalaAtual.id),
+          listarMusicas(supabase, ministerioId),
+          listarCategoriasMusica(supabase, ministerioId),
+        ]);
       setLinhas(linhasCarregadas);
       setUltimoEnvio(envioCarregado);
+      setCronograma(cronogramaCarregado);
+      setRepertorio(repertorioCarregado);
+      setCategorias(categoriasCarregadas);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível carregar a escala.");
     } finally {
@@ -133,6 +156,62 @@ export function MontarEscala() {
     }
   }
 
+  async function recarregarCronograma() {
+    if (!escala) return;
+    setCronograma(await listarCronograma(supabase, escala.id));
+  }
+
+  async function handleAdicionarMusica() {
+    if (!escala || !musicaParaAdicionar) return;
+    setErro(null);
+    try {
+      await adicionarItemCronograma(supabase, escala.id, {
+        musicaId: musicaParaAdicionar,
+        ordem: proximaOrdem(cronograma),
+      });
+      setMusicaParaAdicionar("");
+      await recarregarCronograma();
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível adicionar a música.");
+    }
+  }
+
+  async function handleMoverMusica(indice: number, direcao: -1 | 1) {
+    const destino = indice + direcao;
+    if (destino < 0 || destino >= cronograma.length) return;
+
+    // Mostra a nova ordem na hora; o banco confirma logo atrás.
+    const reordenado = moverItem(cronograma, indice, destino);
+    setCronograma(reordenado);
+    try {
+      await salvarOrdemCronograma(supabase, reordenado.map((item) => item.id));
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível reordenar o cronograma.");
+      await recarregarCronograma();
+    }
+  }
+
+  async function handleAtualizarItem(
+    itemId: string,
+    campos: { tomDoDia?: string | null; momento?: string | null },
+  ) {
+    try {
+      await atualizarItemCronograma(supabase, itemId, campos);
+      await recarregarCronograma();
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível salvar a música.");
+    }
+  }
+
+  async function handleRemoverItem(itemId: string) {
+    try {
+      await removerItemCronograma(supabase, itemId);
+      await recarregarCronograma();
+    } catch (error) {
+      setErro(error instanceof Error ? error.message : "Não foi possível remover a música.");
+    }
+  }
+
   async function handleCompartilhar() {
     if (!escala || !evento || !ministerio) return;
     setErro(null);
@@ -143,6 +222,11 @@ export function MontarEscala() {
       dataHora: evento.dataHora,
       observacoes: evento.observacoes,
       itens: linhas.map((linha) => ({ funcaoNome: linha.funcaoNome, pessoaNome: linha.perfilNome })),
+      cronograma: cronograma.map((item) => ({
+        titulo: item.musicaTitulo,
+        tom: item.tomDoDia ?? item.musicaTom,
+        momento: item.momento,
+      })),
     });
 
     try {
@@ -277,6 +361,113 @@ export function MontarEscala() {
         <p className="mt-3 text-sm text-amber-600">
           Ainda faltam pessoas nas funções obrigatórias: {faltando.map((f) => f.nome).join(", ")}.
         </p>
+      )}
+
+      {/* Só faz sentido para ministério que mantém repertório (louvor). */}
+      {(repertorio.length > 0 || cronograma.length > 0) && (
+        <section className="mt-8">
+          <h2 className="text-sm font-semibold text-slate-700">Cronograma do culto</h2>
+
+          {cronograma.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">Nenhuma música no cronograma ainda.</p>
+          ) : (
+            <ol className="mt-2 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
+              {cronograma.map((item, indice) => (
+                <li key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                  <span className="text-sm text-slate-400">{indice + 1}.</span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-slate-900">{item.musicaTitulo}</p>
+                    {item.musicaTom && (
+                      <p className="text-xs text-slate-500">tom original: {item.musicaTom}</p>
+                    )}
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Tom do dia"
+                    defaultValue={item.tomDoDia ?? ""}
+                    onBlur={(event) => {
+                      const valor = event.target.value.trim();
+                      if (valor !== (item.tomDoDia ?? "")) {
+                        void handleAtualizarItem(item.id, { tomDoDia: valor || null });
+                      }
+                    }}
+                    className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  />
+
+                  <select
+                    value={item.momento ?? ""}
+                    onChange={(event) =>
+                      void handleAtualizarItem(item.id, { momento: event.target.value || null })
+                    }
+                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Momento</option>
+                    {categorias.map((categoria) => (
+                      <option key={categoria.id} value={categoria.nome}>
+                        {categoria.nome}
+                      </option>
+                    ))}
+                  </select>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleMoverMusica(indice, -1)}
+                      disabled={indice === 0}
+                      className="rounded border border-slate-300 px-2 text-sm text-slate-600 disabled:opacity-30"
+                      aria-label={`Subir ${item.musicaTitulo}`}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleMoverMusica(indice, 1)}
+                      disabled={indice === cronograma.length - 1}
+                      className="rounded border border-slate-300 px-2 text-sm text-slate-600 disabled:opacity-30"
+                      aria-label={`Descer ${item.musicaTitulo}`}
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void handleRemoverItem(item.id)}
+                      className="text-xs text-red-600 underline hover:text-red-700"
+                    >
+                      Remover
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+
+          {repertorio.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              <select
+                value={musicaParaAdicionar}
+                onChange={(event) => setMusicaParaAdicionar(event.target.value)}
+                className="flex-1 rounded-lg border border-slate-300 px-2 py-2 text-sm sm:flex-none"
+              >
+                <option value="">Escolha uma música do repertório...</option>
+                {repertorio.map((musica) => (
+                  <option key={musica.id} value={musica.id}>
+                    {musica.titulo}
+                    {musica.tom ? ` (${musica.tom})` : ""}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => void handleAdicionarMusica()}
+                disabled={!musicaParaAdicionar}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                Adicionar
+              </button>
+            </div>
+          )}
+        </section>
       )}
 
       <div className="mt-6 flex flex-wrap items-center gap-2">

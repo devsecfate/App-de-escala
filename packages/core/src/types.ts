@@ -111,6 +111,15 @@ export interface CategoriaMusica {
   ordem: number;
 }
 
+/** Coluna extra que o líder criou no repertório; o valor fica em `Musica.extras[chave]`. */
+export interface CampoMusica {
+  id: string;
+  ministerioId: string;
+  chave: string;
+  rotulo: string;
+  ordem: number;
+}
+
 export interface CronogramaItem {
   id: string;
   escalaId: string;

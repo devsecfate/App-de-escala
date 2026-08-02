@@ -7,6 +7,7 @@ import { MinisterioDetalhe } from "./pages/MinisterioDetalhe";
 import { Eventos } from "./pages/Eventos";
 import { MontarEscala } from "./pages/MontarEscala";
 import { Disponibilidade } from "./pages/Disponibilidade";
+import { Repertorio } from "./pages/Repertorio";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { RequerPerfil } from "./components/RequerPerfil";
 
@@ -59,6 +60,14 @@ export default function App() {
         element={
           <RequerPerfil>
             <MontarEscala />
+          </RequerPerfil>
+        }
+      />
+      <Route
+        path="/ministerios/:id/repertorio"
+        element={
+          <RequerPerfil>
+            <Repertorio />
           </RequerPerfil>
         }
       />
