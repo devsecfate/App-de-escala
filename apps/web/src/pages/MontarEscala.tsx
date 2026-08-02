@@ -3,14 +3,19 @@ import { useParams } from "react-router-dom";
 import {
   definirEscalacao,
   funcoesObrigatoriasFaltando,
+  gerarTextoEscala,
+  linkWhatsApp,
   listarEscalacoesPorFuncao,
   listarMembrosDoMinisterio,
   obterContextoValidacaoEscalacao,
   obterEvento,
   obterMinisterio,
   obterOuCriarEscala,
+  obterUltimoEnvio,
   publicarEscala,
+  registrarEnvio,
   validarEscalacao,
+  type Envio,
   type Escala,
   type EscalacaoDaFuncao,
   type Evento,
@@ -56,6 +61,7 @@ export function MontarEscala() {
   const [publicando, setPublicando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [mensagensPorFuncao, setMensagensPorFuncao] = useState<Record<string, MensagensValidacao>>({});
+  const [ultimoEnvio, setUltimoEnvio] = useState<Envio | null>(null);
 
   async function carregar() {
     if (!eventoId || !ministerioId || !perfil) return;
@@ -73,7 +79,12 @@ export function MontarEscala() {
 
       const escalaAtual = await obterOuCriarEscala(supabase, eventoId, ministerioId, perfil.id);
       setEscala(escalaAtual);
-      setLinhas(await listarEscalacoesPorFuncao(supabase, escalaAtual.id, ministerioId));
+      const [linhasCarregadas, envioCarregado] = await Promise.all([
+        listarEscalacoesPorFuncao(supabase, escalaAtual.id, ministerioId),
+        obterUltimoEnvio(supabase, escalaAtual.id),
+      ]);
+      setLinhas(linhasCarregadas);
+      setUltimoEnvio(envioCarregado);
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível carregar a escala.");
     } finally {
@@ -119,6 +130,39 @@ export function MontarEscala() {
       setLinhas(await listarEscalacoesPorFuncao(supabase, escala.id, ministerioId));
     } catch (error) {
       setErro(error instanceof Error ? error.message : "Não foi possível salvar a escalação.");
+    }
+  }
+
+  async function handleCompartilhar() {
+    if (!escala || !evento || !ministerio) return;
+    setErro(null);
+
+    const texto = gerarTextoEscala({
+      ministerioNome: ministerio.nome,
+      eventoTitulo: evento.titulo,
+      dataHora: evento.dataHora,
+      observacoes: evento.observacoes,
+      itens: linhas.map((linha) => ({ funcaoNome: linha.funcaoNome, pessoaNome: linha.perfilNome })),
+    });
+
+    try {
+      if (typeof navigator.share === "function") {
+        await navigator.share({ text: texto });
+      } else {
+        window.open(linkWhatsApp(texto), "_blank", "noopener");
+      }
+    } catch (error) {
+      // O usuário fechar a folha de compartilhamento não é erro nem envio.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      setErro(error instanceof Error ? error.message : "Não foi possível compartilhar a escala.");
+      return;
+    }
+
+    try {
+      setUltimoEnvio(await registrarEnvio(supabase, escala.id, "whatsapp"));
+    } catch {
+      // A escala já foi compartilhada; o histórico é secundário e não vale
+      // alarmar o líder com um erro vermelho se só o registro falhou.
     }
   }
 
@@ -235,14 +279,32 @@ export function MontarEscala() {
         </p>
       )}
 
-      <button
-        type="button"
-        onClick={() => void handlePublicar()}
-        disabled={publicando || escala.status === "publicada"}
-        className="mt-6 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-      >
-        {escala.status === "publicada" ? "Escala publicada" : publicando ? "Publicando..." : "Publicar escala"}
-      </button>
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handlePublicar()}
+          disabled={publicando || escala.status === "publicada"}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+        >
+          {escala.status === "publicada" ? "Escala publicada" : publicando ? "Publicando..." : "Publicar escala"}
+        </button>
+
+        {escala.status === "publicada" && (
+          <button
+            type="button"
+            onClick={() => void handleCompartilhar()}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
+          >
+            Compartilhar no WhatsApp
+          </button>
+        )}
+      </div>
+
+      {escala.status === "publicada" && ultimoEnvio?.enviadoEm && (
+        <p className="mt-2 text-xs text-slate-500">
+          Compartilhada pela última vez em {formatarDataHora(ultimoEnvio.enviadoEm)}.
+        </p>
+      )}
     </Layout>
   );
 }

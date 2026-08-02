@@ -9,5 +9,7 @@
       "@escala-app/core": ["../../packages/core/src/index.ts"]
     }
   },
-  "include": ["src"]
+  "include": ["src"],
+  // O service worker roda em WebWorker, não no DOM: tem tsconfig próprio.
+  "exclude": ["src/sw.ts"]
 }
