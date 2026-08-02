@@ -11,6 +11,7 @@
     "dev": "npm run dev -w @escala-app/web",
     "build": "npm run typecheck -w @escala-app/core && npm run build -w @escala-app/web",
     "test": "npm run test -w @escala-app/core",
+    "test:integracao": "npm run test:integracao -w @escala-app/core",
     "lint": "npm run lint -w @escala-app/web"
   }
 }

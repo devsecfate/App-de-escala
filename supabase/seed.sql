@@ -42,26 +42,33 @@ begin
   values (v_igreja_id, 'Igreja Exemplo', 'America/Sao_Paulo');
 
   -- Usuários de autenticação (auth.users + auth.identities) ---------------
+  --
+  -- confirmation_token, recovery_token, email_change_token_new e email_change
+  -- precisam ser string vazia, NUNCA null: o GoTrue lê essas colunas em campos
+  -- de texto não-anuláveis e, com null, todo login morre com
+  -- "Database error querying schema" (erro 500 em /auth/v1/token). Elas são as
+  -- únicas colunas de texto de auth.users sem default no Postgres do Supabase.
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, created_at, updated_at,
-    raw_app_meta_data, raw_user_meta_data
+    raw_app_meta_data, raw_user_meta_data,
+    confirmation_token, recovery_token, email_change_token_new, email_change
   ) values
     ('00000000-0000-0000-0000-000000000000', v_admin_id, 'authenticated', 'authenticated',
      'admin@igreja.test', v_senha_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}', '{"name":"Admin da Igreja"}'),
+     '{"provider":"email","providers":["email"]}', '{"name":"Admin da Igreja"}', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_lider_louvor_id, 'authenticated', 'authenticated',
      'lider.louvor@igreja.test', v_senha_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}', '{"name":"Líder do Louvor"}'),
+     '{"provider":"email","providers":["email"]}', '{"name":"Líder do Louvor"}', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_lider_tecnologia_id, 'authenticated', 'authenticated',
      'lider.tecnologia@igreja.test', v_senha_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}', '{"name":"Líder da Tecnologia"}'),
+     '{"provider":"email","providers":["email"]}', '{"name":"Líder da Tecnologia"}', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_vocal1_id, 'authenticated', 'authenticated',
      'vocal1@igreja.test', v_senha_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}', '{"name":"Vocal Um"}'),
+     '{"provider":"email","providers":["email"]}', '{"name":"Vocal Um"}', '', '', '', ''),
     ('00000000-0000-0000-0000-000000000000', v_projecao1_id, 'authenticated', 'authenticated',
      'projecao1@igreja.test', v_senha_hash, now(), now(), now(),
-     '{"provider":"email","providers":["email"]}', '{"name":"Projeção Um"}');
+     '{"provider":"email","providers":["email"]}', '{"name":"Projeção Um"}', '', '', '', '');
 
   insert into auth.identities (
     id, provider_id, user_id, identity_data, provider, created_at, updated_at, last_sign_in_at
