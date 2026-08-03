@@ -1,0 +1,147 @@
+# Deploy
+
+Passo a passo para colocar o app no ar: **Supabase cloud** (banco, login e Edge Functions) e **Vercel** (o app web).
+
+A ordem importa: o Supabase vem primeiro, porque a URL e a chave anônima dele entram no build do front.
+
+---
+
+## 1. Supabase cloud
+
+### 1.1 Entrar e criar o projeto
+
+```bash
+npx supabase login
+```
+
+Comando interativo (abre o navegador) — rode você mesmo. No painel https://supabase.com/dashboard, crie o projeto:
+
+- **Region:** `South America (São Paulo)` — o app é para uma igreja no Brasil, e a latência aparece em cada tela.
+- **Database password:** guarde num gerenciador de senhas. Ela não é a senha do login do app; é a do Postgres, e só aparece uma vez.
+
+Anote o **project ref** (o `abcdefghijklm` de `https://abcdefghijklm.supabase.co`).
+
+### 1.2 Aplicar as migrations
+
+```bash
+npx supabase link --project-ref <project-ref>
+npx supabase db push
+```
+
+Os dois pedem a senha do banco (a de 1.1) no terminal, então rode você mesmo.
+
+Isso aplica as 5 migrations de `supabase/migrations/` na nuvem, incluindo a de GRANTs — sem ela, toda query responde "permission denied" mesmo com RLS correta.
+
+**O `supabase/seed.sql` não vai para a nuvem**, de propósito: ele cria usuários de teste com senha conhecida. Na nuvem, a igreja nasce pelo caminho real — você se cadastra pelo app e a tela de onboarding cria a igreja e te deixa admin.
+
+### 1.3 Endereço do app no login (o erro clássico)
+
+No painel: **Authentication → URL Configuration**.
+
+- **Site URL:** a URL da Vercel (ex.: `https://app-de-escala.vercel.app`)
+- **Redirect URLs:** a mesma URL com `/*` no fim
+
+Sem isso, o link mágico e o e-mail de convite mandam a pessoa para `localhost:3000` — o convite "não funciona" e não é óbvio por quê.
+
+### 1.4 E-mail de verdade
+
+O SMTP embutido do Supabase serve para testar e só: poucos e-mails por hora e **só para endereços da sua organização**. O convite de membro (`convidar-membro`) depende disso.
+
+Para a igreja usar, configure SMTP próprio em **Project Settings → Auth → SMTP Settings** (Resend, Brevo, Amazon SES — todos com camada gratuita suficiente para uma igreja).
+
+### 1.5 Edge Functions
+
+```bash
+npx supabase functions deploy convidar-membro
+npx supabase functions deploy enviar-lembretes
+```
+
+`convidar-membro` não precisa de segredo (usa as variáveis que o Supabase já injeta). `enviar-lembretes` precisa:
+
+```bash
+# 1. Gere o par VAPID uma vez e guarde as duas chaves:
+deno eval 'import w from "npm:web-push@^3.6.7"; console.log(w.generateVAPIDKeys())'
+
+# 2. Configure os segredos:
+npx supabase secrets set \
+  VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... \
+  VAPID_SUBJECT=mailto:contato@suaigreja.com \
+  LEMBRETES_SECRET=$(openssl rand -hex 32)
+```
+
+A chave **pública** também vai para a Vercel, como `VITE_VAPID_PUBLIC_KEY`. A privada nunca sai daqui.
+
+### 1.6 Lembrete diário
+
+Com o projeto no ar, o agendamento finalmente tem onde existir. No **SQL Editor** do painel:
+
+```sql
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+  'lembretes-vespera', '0 21 * * *',   -- 18h de Brasília
+  $$ select net.http_post(
+       url := 'https://<project-ref>.supabase.co/functions/v1/enviar-lembretes',
+       headers := '{"x-lembretes-secret": "<LEMBRETES_SECRET>"}'::jsonb
+     ) $$
+);
+```
+
+Confira depois com `select * from cron.job;`.
+
+---
+
+## 2. Vercel
+
+O `vercel.json` na raiz já traz o que a Vercel precisa saber:
+
+- build pela raiz (`npm run build`, que typecheca o core antes), saída em `apps/web/dist`;
+- rewrite de SPA, para `/eventos` e `/ministerios/:id` abrirem direto (a Vercel checa o sistema de arquivos antes dos rewrites, então `sw.js`, manifest e ícones continuam sendo servidos como eles mesmos);
+- `Cache-Control` curto no `sw.js` — é ele quem descobre que existe versão nova do app; cacheado, o celular ficaria preso numa versão velha.
+
+### 2.1 Importar o repositório
+
+Em https://vercel.com/new, importe `devsecfate/App-de-escala`. Deixe o **Root Directory** na raiz do repositório (o `vercel.json` cuida do resto).
+
+### 2.2 Variáveis de ambiente
+
+Em **Settings → Environment Variables** (marque Production, Preview e Development):
+
+| Variável | Valor |
+|---|---|
+| `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | Project Settings → API → `anon` `public` |
+| `VITE_VAPID_PUBLIC_KEY` | a chave pública gerada em 1.5 (opcional) |
+
+Sem as duas primeiras o build **falha de propósito**, com mensagem explícita: sem elas o Rollup descartaria o app inteiro e publicaria um bundle vazio, e o deploy "passaria" mostrando uma tela em branco.
+
+> **Cuidado ao gravar esses valores pelo terminal.** No Windows PowerShell 5.1,
+> `"valor" | vercel env add NOME` grava um **BOM (U+FEFF) invisível na frente**
+> do valor. A chave vai dentro de um cabeçalho HTTP, cabeçalho só aceita
+> Latin-1, e o navegador então recusa montar a requisição com
+> `Failed to execute 'fetch' ... String contains non ISO-8859-1 code point`.
+> O app fica completamente mudo — nenhuma chamada sai, nada aparece no log do
+> servidor. Aconteceu neste projeto e custou uma sessão de depuração.
+> Use o Bash (`printf '%s' "valor" | vercel env add ...`) ou cole no painel.
+> Desde então `apps/web/src/lib/supabase.ts` também remove BOM e espaços das
+> variáveis, mas o melhor é não gravar torto.
+
+Sem a terceira, o botão "Avisos no celular" simplesmente não aparece — o resto funciona.
+
+### 2.3 Depois de subir
+
+Volte ao passo 1.3 e coloque a URL da Vercel no Supabase.
+
+---
+
+## 3. Conferir no celular
+
+Abra a URL da Vercel no celular (HTTPS de verdade, que é o que o service worker exige):
+
+1. **Cadastre-se** e passe pelo onboarding: cria a igreja e te deixa admin.
+2. **Instalar:** Android → o cartão "Instalar na tela inicial" ou o menu do Chrome; iPhone → Compartilhar → "Adicionar à Tela de Início". O ícone tem que sair certo, sem fundo branco nem corte.
+3. **Abrir pelo atalho:** tem que abrir em tela cheia, sem barra de endereço.
+4. **Offline:** navegue pelas telas, ligue o modo avião e **recarregue**. A escala tem que continuar aparecendo, com a faixa âmbar no topo.
+5. **Avisos no celular** (se configurou VAPID): ativar, e conferir a linha nova em `push_subscriptions`.
+6. **Sair:** o cache `escala-dados-v1` tem que sumir junto.

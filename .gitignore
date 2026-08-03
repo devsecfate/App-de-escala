@@ -13,6 +13,9 @@ dist-ssr/
 supabase/.branches
 supabase/.temp
 
+# vercel (vínculo local com o projeto, específico da máquina)
+.vercel
+
 # editor
 .vscode/*
 !.vscode/extensions.json

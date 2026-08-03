@@ -425,3 +425,13 @@ entrypoint = "./functions/convidar-membro/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/convidar-membro/*.html" ]
+
+[functions.enviar-lembretes]
+enabled = true
+# Quem chama é o agendador (pg_cron), não uma pessoa logada: não existe JWT de
+# usuário para mandar. A porta é o segredo compartilhado `x-lembretes-secret`,
+# conferido logo na primeira linha do handler. Com verify_jwt = true a
+# plataforma barraria a chamada do cron antes de chegar no nosso código.
+verify_jwt = false
+import_map = "./functions/enviar-lembretes/deno.json"
+entrypoint = "./functions/enviar-lembretes/index.ts"
