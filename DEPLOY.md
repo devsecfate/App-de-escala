@@ -90,6 +90,31 @@ select cron.schedule(
 
 Confira depois com `select * from cron.job;`.
 
+### 1.7 Chaves legadas desligadas
+
+O Supabase entrega dois conjuntos de chaves: as **legadas** (`anon` e
+`service_role`, JWTs estáticos assinados em HS256) e as **novas**
+(`sb_publishable_...` e `sb_secret_...`). A `service_role` legada ignora RLS e
+dá acesso total ao banco — é a chave que nunca pode vazar.
+
+Neste projeto as legadas foram desligadas via API:
+
+```bash
+curl -X PUT "https://api.supabase.com/v1/projects/<project-ref>/api-keys/legacy?enabled=false" \
+  -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN"
+```
+
+(O `enabled` vai como parâmetro de query, não no corpo — no corpo a API responde
+400 dizendo que o campo é `undefined`.)
+
+Depois de desligar, quem usar uma chave legada leva
+`401 Legacy API keys are disabled`. Verificado que continua tudo funcionando: o
+front com a chave publicável e a Edge Function `enviar-lembretes`, que segue
+recebendo `SUPABASE_SERVICE_ROLE_KEY` injetada pela plataforma. Se um dia essa
+injeção parar, o conserto é a função passar a ler a chave secreta nova.
+
+Para religar (não recomendado): mesma URL com `enabled=true`.
+
 ---
 
 ## 2. Vercel
@@ -104,6 +129,14 @@ O `vercel.json` na raiz já traz o que a Vercel precisa saber:
 
 Em https://vercel.com/new, importe `devsecfate/App-de-escala`. Deixe o **Root Directory** na raiz do repositório (o `vercel.json` cuida do resto).
 
+O projeto já está criado e ligado ao repositório, com `main` como branch de
+produção: **todo push para `main` publica sozinho**. Para publicar sem passar
+pelo git (o que sobe o diretório local, não o commit):
+
+```bash
+npx vercel deploy --prod --yes --token "$VERCEL_TOKEN"
+```
+
 ### 2.2 Variáveis de ambiente
 
 Em **Settings → Environment Variables** (marque Production, Preview e Development):
@@ -111,8 +144,12 @@ Em **Settings → Environment Variables** (marque Production, Preview e Developm
 | Variável | Valor |
 |---|---|
 | `VITE_SUPABASE_URL` | `https://<project-ref>.supabase.co` |
-| `VITE_SUPABASE_ANON_KEY` | Project Settings → API → `anon` `public` |
+| `VITE_SUPABASE_ANON_KEY` | Project Settings → API Keys → a chave **publicável** (`sb_publishable_...`) |
 | `VITE_VAPID_PUBLIC_KEY` | a chave pública gerada em 1.5 (opcional) |
+
+O nome da variável diz `ANON_KEY` por herança, mas o valor é a chave
+publicável nova. Neste projeto as **chaves legadas (`anon`/`service_role`) estão
+desligadas** — ver 1.7.
 
 Sem as duas primeiras o build **falha de propósito**, com mensagem explícita: sem elas o Rollup descartaria o app inteiro e publicaria um bundle vazio, e o deploy "passaria" mostrando uma tela em branco.
 
