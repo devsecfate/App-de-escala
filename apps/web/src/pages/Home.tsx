@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
 import { AtivarAvisos } from "../components/AtivarAvisos";
+import { InstalarApp } from "../components/InstalarApp";
 
 function rotuloConfirmacao(confirmacao: string): { texto: string; classe: string } {
   if (confirmacao === "confirmado") return { texto: "Confirmado", classe: "bg-emerald-100 text-emerald-700" };
@@ -63,6 +64,7 @@ export function Home() {
     <Layout>
       <h1 className="text-lg font-semibold text-slate-900">Minhas escalas</h1>
 
+      <InstalarApp />
       <AtivarAvisos />
 
       {erro && <p className="mt-4 text-sm text-red-600">{erro}</p>}

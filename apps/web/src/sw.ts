@@ -1,15 +1,21 @@
 /// <reference lib="webworker" />
 
 /**
- * Service worker do PWA (Fase 3).
+ * Service worker do PWA.
  *
- * Além do cache offline que o Workbox injeta, trata as notificações push do
- * lembrete de véspera. O conteúdo vem pronto da Edge Function `enviar-lembretes`
- * (ver `gerarLembreteVespera` em packages/core) — aqui só exibimos.
+ * Faz três coisas:
+ *  - serve o app a partir do cache, inclusive nas rotas internas (Fase 5);
+ *  - guarda as leituras do Supabase para a escala abrir sem internet (Fase 5);
+ *  - exibe as notificações push do lembrete de véspera (Fase 3), que já chegam
+ *    prontas da Edge Function `enviar-lembretes` (ver `gerarLembreteVespera`).
  */
 
 import { clientsClaim } from "workbox-core";
-import { cleanupOutdatedCaches, precacheAndRoute } from "workbox-precaching";
+import { ExpirationPlugin } from "workbox-expiration";
+import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from "workbox-precaching";
+import { NavigationRoute, registerRoute } from "workbox-routing";
+import { NetworkFirst } from "workbox-strategies";
+import { CACHE_DE_DADOS } from "./lib/offline";
 
 declare const self: ServiceWorkerGlobalScope;
 
@@ -20,6 +26,43 @@ cleanupOutdatedCaches();
 // assumir o controle assim que instala.
 self.skipWaiting();
 clientsClaim();
+
+// O app é uma SPA: /eventos e /ministerios/:id não existem como arquivo no
+// servidor. Sem esta rota, abrir o app offline direto numa dessas URLs (o
+// atalho na tela inicial pode apontar para qualquer uma) daria erro de rede.
+registerRoute(new NavigationRoute(createHandlerBoundToURL("index.html")));
+
+/**
+ * Leitura offline: as respostas do PostgREST ficam guardadas e voltam quando a
+ * rede falha ou demora demais.
+ *
+ * NetworkFirst, e não CacheFirst, porque escala desatualizada é pior do que
+ * escala que demora: com internet a pessoa sempre vê o dado de agora, e o
+ * cache só entra quando não há alternativa.
+ *
+ * A rota é reconhecida pelo caminho `/rest/v1/` em vez da URL do Supabase para
+ * o service worker não precisar de variável de ambiente. `/auth/v1/` fica de
+ * fora de propósito: token não se guarda em cache.
+ */
+registerRoute(
+  ({ url, request }) => request.method === "GET" && url.pathname.startsWith("/rest/v1/"),
+  new NetworkFirst({
+    cacheName: CACHE_DE_DADOS,
+    // Rede de igreja costuma ser ruim: depois de 5s vale mais entregar o que
+    // está salvo do que deixar a tela girando.
+    networkTimeoutSeconds: 5,
+    // O PostgREST varia a resposta por cabeçalho (Accept, Prefer); sem isto o
+    // match no cache falharia justamente quando é mais necessário.
+    matchOptions: { ignoreVary: true },
+    plugins: [
+      new ExpirationPlugin({
+        maxEntries: 200,
+        maxAgeSeconds: 30 * 24 * 60 * 60,
+        purgeOnQuotaError: true,
+      }),
+    ],
+  }),
+);
 
 interface ConteudoNotificacao {
   titulo: string;

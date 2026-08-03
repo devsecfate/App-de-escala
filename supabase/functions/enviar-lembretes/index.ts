@@ -4,12 +4,16 @@
 // Scheduled Functions) — ver o comentário no fim do arquivo. Não é uma função
 // de usuário: roda com service role e se protege com um segredo compartilhado.
 //
-// A conta de "amanhã" mora em packages/core/src/lembretes.ts, testada com
-// vitest, para o fuso de cada igreja ser respeitado sem duplicar a lógica aqui.
+// A conta de "amanhã" mora em packages/core/src/datas.ts e o texto do aviso em
+// packages/core/src/lembretes.ts, os dois testados com vitest, para o fuso de
+// cada igreja ser respeitado sem duplicar a lógica aqui. Os dois arquivos são
+// importados direto (sem bundler), então nenhum deles pode importar outra coisa
+// do core: o Deno não resolveria os `.js` do TypeScript.
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import webpush from "web-push";
-import { gerarLembreteVespera, intervaloDoDiaSeguinte } from "../../../packages/core/src/lembretes.ts";
+import { intervaloDoDiaSeguinte } from "../../../packages/core/src/datas.ts";
+import { gerarLembreteVespera } from "../../../packages/core/src/lembretes.ts";
 
 interface IgrejaRow {
   id: string;

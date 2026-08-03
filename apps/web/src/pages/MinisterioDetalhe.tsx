@@ -194,12 +194,22 @@ export function MinisterioDetalhe() {
     <Layout>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-lg font-semibold text-slate-900">{ministerio.nome}</h1>
-        <Link
-          to={`/ministerios/${ministerio.id}/repertorio`}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          Repertório
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          {souLider && (
+            <Link
+              to={`/ministerios/${ministerio.id}/relatorio`}
+              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              Relatório
+            </Link>
+          )}
+          <Link
+            to={`/ministerios/${ministerio.id}/repertorio`}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            Repertório
+          </Link>
+        </div>
       </div>
 
       {erro && <p className="mt-4 text-sm text-red-600">{erro}</p>}

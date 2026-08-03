@@ -29,22 +29,26 @@ export default defineConfig(({ command, mode }) => {
         srcDir: "src",
         filename: "sw.ts",
         registerType: "autoUpdate",
-        includeAssets: ["pwa-icon.svg"],
+        includeAssets: ["pwa-icon.svg", "apple-touch-icon.png"],
         manifest: {
+          id: "/",
           name: "App de Escala",
           short_name: "Escala",
           description: "Organize a escala de pessoas que servem na igreja, por ministério.",
+          lang: "pt-BR",
           theme_color: "#0f172a",
-          background_color: "#ffffff",
+          background_color: "#0f172a",
           display: "standalone",
           start_url: "/",
+          scope: "/",
+          // Os PNGs saem de `node scripts/gerar-icones.mjs`. O 192 e o 512 são
+          // o mínimo que o Chrome pede para oferecer a instalação; o maskable
+          // é o que evita o Android cortar o desenho ao aplicar a máscara dele.
           icons: [
-            {
-              src: "pwa-icon.svg",
-              sizes: "any",
-              type: "image/svg+xml",
-              purpose: "any",
-            },
+            { src: "pwa-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+            { src: "pwa-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+            { src: "pwa-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+            { src: "pwa-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
           ],
         },
       }),

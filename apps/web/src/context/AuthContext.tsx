@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { Session } from "@supabase/supabase-js";
 import { obterMeuPerfil, type Perfil } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
+import { limparDadosOffline } from "../lib/offline";
 
 interface AuthContextValue {
   session: Session | null;
@@ -64,7 +65,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function sair() {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      // Mesmo se o signOut falhar (sem internet, por exemplo), o que está
+      // guardado no aparelho tem que sair junto: celular emprestado na igreja
+      // não pode mostrar a escala de quem logou antes.
+      await limparDadosOffline();
+    }
   }
 
   const carregando = carregandoSessao || (!!session && carregandoPerfil && !perfil);

@@ -1,7 +1,9 @@
 export * from "./types.js";
 export * from "./regras.js";
 export * from "./texto-escala.js";
+export * from "./datas.js";
 export * from "./lembretes.js";
+export * from "./relatorio.js";
 export * from "./cronograma-ordem.js";
 export * from "./supabase.js";
 
@@ -18,3 +20,4 @@ export * from "./api/envios.js";
 export * from "./api/push.js";
 export * from "./api/musicas.js";
 export * from "./api/cronograma.js";
+export * from "./api/relatorio.js";

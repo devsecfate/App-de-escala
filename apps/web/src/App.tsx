@@ -8,6 +8,7 @@ import { Eventos } from "./pages/Eventos";
 import { MontarEscala } from "./pages/MontarEscala";
 import { Disponibilidade } from "./pages/Disponibilidade";
 import { Repertorio } from "./pages/Repertorio";
+import { Relatorio } from "./pages/Relatorio";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { RequerPerfil } from "./components/RequerPerfil";
 
@@ -68,6 +69,14 @@ export default function App() {
         element={
           <RequerPerfil>
             <Repertorio />
+          </RequerPerfil>
+        }
+      />
+      <Route
+        path="/ministerios/:id/relatorio"
+        element={
+          <RequerPerfil>
+            <Relatorio />
           </RequerPerfil>
         }
       />
