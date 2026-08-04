@@ -5,7 +5,11 @@ Memória de trabalho do projeto App de Escala. Leia este arquivo primeiro para p
 ## Estado atual (2026-08-04)
 
 - Fases 0 a 5 implementadas **e no ar**. Repositório: https://github.com/devsecfate/App-de-escala (branch `main`). Detalhes em `memoria/memoria.md`.
-- **Etapa 6 inteira implementada (6.1, 6.2 e 6.3) — ainda não commitada, ainda não em produção.** O `planejamento/etapa-6-conta-edicao-redesign.md` está cumprido de ponta a ponta.
+- **Etapa 6 inteira implementada e no ar** (commit `c8e8d12` na `main`; as 7 migrations estão aplicadas no Supabase `escala-app-sp` e a Vercel publicou). O `planejamento/etapa-6-conta-edicao-redesign.md` está cumprido de ponta a ponta.
+- **`mailer_autoconfirm` está `true` em produção** (ligado em 2026-08-04 pela Management API). É o passo da §1.4 do `DEPLOY.md`, e sem ele o `signUp` não devolve sessão: manda um e-mail de confirmação que o SMTP embutido só entrega para o dono do projeto, e ninguém da igreja passa da tela de criar conta. Conferir com:
+  `curl -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" https://api.supabase.com/v1/projects/ehwvgsyrtymdypubnhjr/config/auth`
+  Ligar de novo, se algum dia voltar: `curl -X PATCH ... -d '{"mailer_autoconfirm": true}'` no mesmo endereço.
+- **O service worker serve a versão antiga até um recarregamento.** Depois de publicar, a primeira visita ainda mostra o app velho (é o precache da Fase 5); como o `sw.ts` faz `skipWaiting()` + `clientsClaim()`, o segundo carregamento já traz o novo. Não confunda isso com deploy que não saiu — confira em `api.vercel.com/v6/deployments?app=escala-app`.
 - **O que a 6.2 + 6.3 entregaram** (a queixa do usuário era: "interface básica e sem sal, e não dá para excluir nem editar ministério nem função"):
   - **Toda tela do app foi reescrita** em cima dos primitivos: `Home` (cartão da próxima escala com gradiente e glow), `Eventos` (agora "Agenda"), `Ministerios`, `Disponibilidade`, `MinisterioDetalhe`, `MontarEscala`, `Repertorio`, `Relatorio`. Nenhuma tela usa mais `slate` cru.
   - **Editar e excluir existem em tudo:** ministério, evento, função, música, categoria, coluna do repertório, período de indisponibilidade, membro, escala. A regra é sempre a mesma: `decidirExclusao` (em `packages/core/src/exclusao.ts`, com testes) escolhe entre **excluir de vez** (nunca foi usado) e **arquivar** (tem histórico), e escreve a frase que a confirmação mostra — incluindo o número ("já aparece em 6 escalas").
@@ -52,7 +56,7 @@ Memória de trabalho do projeto App de Escala. Leia este arquivo primeiro para p
 - O `apps/web` agora tem três tsconfigs: `tsconfig.app.json` (DOM, exclui `src/sw.ts`), `tsconfig.node.json` (vite.config) e `tsconfig.worker.json` (WebWorker, só o service worker). `tsc -b` cobre os três.
 - **Produção:** app em https://escala-app-two.vercel.app (projeto Vercel `escala-app`, ligado ao GitHub — todo push para `main` publica sozinho). Banco: projeto Supabase `escala-app-sp` (`ehwvgsyrtymdypubnhjr`), São Paulo, com as 5 migrations e **sem seed**. Cron `lembretes-vespera` ativo às 21h UTC (18h de Brasília). As **chaves legadas do Supabase estão desligadas**: `VITE_SUPABASE_ANON_KEY` guarda a chave publicável (`sb_publishable_...`), apesar do nome. Runbook completo em `DEPLOY.md`.
 - **Armadilha que já custou uma sessão inteira:** no PowerShell 5.1, `"valor" | vercel env add NOME` grava um BOM (U+FEFF) invisível na frente do valor. A chave vai num cabeçalho HTTP, cabeçalho só aceita Latin-1, e o `fetch` recusa a requisição inteira antes de sair do navegador — o app fica 100% mudo, sem uma linha de log no servidor. Grave variáveis pelo Bash (`printf '%s'`) ou pelo painel. `apps/web/src/lib/supabase.ts` hoje também limpa BOM e espaços, mas o melhor é não gravar torto.
-- **Onboarding nunca foi concluído em produção:** existe 1 usuário autenticado (`guibeloliv@gmail.com`, criado por link mágico, **sem senha**), 0 perfis e 0 igrejas. O banco de produção está vazio de dados de negócio.
+- **Onboarding ainda não foi concluído em produção:** existe 1 usuário autenticado (`guibeloliv@gmail.com`, criado por link mágico, **sem senha**), 0 perfis e 0 igrejas. O banco de produção continua vazio de dados de negócio — o caminho agora é o dono criar a conta em `/cadastrar` e passar pela porta "Sou eu quem administra a igreja" do onboarding.
 
 ## Como trabalhar neste projeto
 
