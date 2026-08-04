@@ -30,14 +30,20 @@ export default defineConfig(({ command, mode }) => {
         filename: "sw.ts",
         registerType: "autoUpdate",
         includeAssets: ["pwa-icon.svg", "apple-touch-icon.png"],
+        // O globPatterns padrão NÃO inclui woff2. Sem esta linha a Inter fica
+        // fora do precache e o app aberto offline volta para a fonte do
+        // sistema — quebra silenciosa, que não aparece no build.
+        injectManifest: {
+          globPatterns: ["**/*.{js,css,html,svg,png,ico,woff2}"],
+        },
         manifest: {
           id: "/",
           name: "App de Escala",
           short_name: "Escala",
           description: "Organize a escala de pessoas que servem na igreja, por ministério.",
           lang: "pt-BR",
-          theme_color: "#0f172a",
-          background_color: "#0f172a",
+          theme_color: "#0f766e",
+          background_color: "#0f766e",
           display: "standalone",
           start_url: "/",
           scope: "/",

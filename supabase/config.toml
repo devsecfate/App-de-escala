@@ -223,6 +223,17 @@ enable_signup = true
 # addresses. If disabled, only the new email is required to confirm.
 double_confirm_changes = true
 # If enabled, users need to confirm their email address before signing in.
+#
+# Fica FALSE de propósito (decisão da Etapa 6): o cadastro cria a conta e já
+# entra. Este projeto não tem SMTP próprio, e o servidor embutido do Supabase só
+# entrega para o dono do projeto — com confirmação ligada, ninguém da igreja
+# conseguiria passar da primeira tela.
+#
+# Não é um buraco de segurança: quem cria conta sem convite não enxerga nada. A
+# RLS isola tudo por igreja, e sem perfil (`minha_igreja()` = null) nenhuma
+# policy casa. O que dá acesso é o código do convite, não o e-mail.
+#
+# Em produção o equivalente é ligar `mailer_autoconfirm` no painel (ver DEPLOY.md).
 enable_confirmations = false
 # If enabled, users will need to reauthenticate or have logged in recently to change their password.
 secure_password_change = false

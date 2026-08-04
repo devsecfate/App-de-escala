@@ -38,6 +38,43 @@ export async function entrarComo(email: string): Promise<SupabaseClient> {
   return client;
 }
 
+export interface ContaNova {
+  client: SupabaseClient;
+  email: string;
+  id: string;
+}
+
+/**
+ * Cria uma conta do zero pelo mesmo caminho do app (`signUp` com o nome em
+ * `user_metadata`) e devolve o cliente já logado, sem perfil e sem igreja.
+ *
+ * É o que os testes de convite precisam: os usuários do seed já têm perfil, e
+ * `usar_convite` recusa quem já pertence a uma igreja.
+ *
+ * O e-mail carrega tempo + acaso porque a suíte roda contra o mesmo banco
+ * várias vezes; conta repetida daria "User already registered".
+ */
+export async function criarContaNova(nome: string): Promise<ContaNova> {
+  const email = `teste.${Date.now()}.${Math.random().toString(36).slice(2, 8)}@igreja.test`;
+  const client = createClient(URL_SUPABASE, CHAVE_ANON, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+
+  const { data, error } = await client.auth.signUp({
+    email,
+    password: SENHA_SEED,
+    options: { data: { nome } },
+  });
+  if (error) throw new Error(`Não foi possível criar a conta ${email}: ${error.message}`);
+  if (!data.session || !data.user) {
+    throw new Error(
+      "signUp não devolveu sessão. Confira `enable_confirmations = false` em supabase/config.toml.",
+    );
+  }
+
+  return { client, email, id: data.user.id };
+}
+
 /** Id do ministério pelo nome, dentro da igreja do usuário logado. */
 export async function idDoMinisterio(client: SupabaseClient, nome: string): Promise<string> {
   const { data, error } = await client.from("ministerios").select("id").eq("nome", nome).single();

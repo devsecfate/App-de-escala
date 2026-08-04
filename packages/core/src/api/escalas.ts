@@ -4,6 +4,7 @@ import type { ContextoValidacaoEscalacao, EscalacaoExistente } from "../regras.j
 import { mesmoMes } from "../regras.js";
 import { listarIndisponibilidades } from "./indisponibilidades.js";
 import { obterRegrasMinisterio } from "./regras-ministerio.js";
+import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 interface EscalaRow {
   id: string;
@@ -37,21 +38,40 @@ export async function obterOuCriarEscala(
   ministerioId: string,
   criadaPor: string,
 ): Promise<Escala> {
-  const existente = await client
-    .from("escalas")
-    .select(COLUNAS_ESCALA)
-    .eq("evento_id", eventoId)
-    .eq("ministerio_id", ministerioId)
-    .maybeSingle();
-  if (existente.error) throw existente.error;
-  if (existente.data) return mapEscala(existente.data as EscalaRow);
+  const buscar = async () => {
+    const { data, error } = await client
+      .from("escalas")
+      .select(COLUNAS_ESCALA)
+      .eq("evento_id", eventoId)
+      .eq("ministerio_id", ministerioId)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? mapEscala(data as EscalaRow) : null;
+  };
+
+  const existente = await buscar();
+  if (existente) return existente;
 
   const criada = await client
     .from("escalas")
     .insert({ evento_id: eventoId, ministerio_id: ministerioId, criada_por: criadaPor })
     .select(COLUNAS_ESCALA)
     .single();
-  if (criada.error) throw criada.error;
+
+  if (criada.error) {
+    // 23505 = unique_violation em (evento_id, ministerio_id): alguém criou a
+    // escala entre a busca e a inserção acima. Acontece de verdade — dois
+    // líderes abrindo a mesma URL ao mesmo tempo, e no desenvolvimento a cada
+    // carregamento, porque o StrictMode do React roda o efeito duas vezes.
+    // Perder a corrida não é erro: quem ganhou criou exatamente a linha que
+    // queríamos, então basta lê-la.
+    if ((criada.error as { code?: string }).code === "23505") {
+      const doOutro = await buscar();
+      if (doOutro) return doOutro;
+    }
+    throw criada.error;
+  }
+
   return mapEscala(criada.data as EscalaRow);
 }
 
@@ -59,6 +79,8 @@ export interface EscalacaoDaFuncao {
   funcaoId: string;
   funcaoNome: string;
   obrigatoria: boolean;
+  /** função arquivada que ainda tem alguém escalado: dá para tirar, não para pôr */
+  arquivada: boolean;
   escalacaoId: string | null;
   perfilId: string | null;
   perfilNome: string | null;
@@ -69,6 +91,7 @@ interface FuncaoRow {
   id: string;
   nome: string;
   obrigatoria: boolean;
+  ativo: boolean;
 }
 
 interface EscalacaoRow {
@@ -85,9 +108,13 @@ export async function listarEscalacoesPorFuncao(
   escalaId: string,
   ministerioId: string,
 ): Promise<EscalacaoDaFuncao[]> {
+  // Traz também as arquivadas: uma escala montada antes do arquivamento ainda
+  // tem gente escalada nelas, e sumir com a linha faria a pessoa desaparecer da
+  // tela do líder sem ter saído da escala. As arquivadas vazias são descartadas
+  // logo abaixo, para ninguém escalar em função que não existe mais.
   const funcoesRes = await client
     .from("funcoes")
-    .select("id, nome, obrigatoria")
+    .select("id, nome, obrigatoria, ativo")
     .eq("ministerio_id", ministerioId)
     .order("nome");
   if (funcoesRes.error) throw funcoesRes.error;
@@ -103,23 +130,26 @@ export async function listarEscalacoesPorFuncao(
     porFuncao.set(linha.funcao_id, linha);
   }
 
-  return ((funcoesRes.data ?? []) as FuncaoRow[]).map((funcao) => {
-    const escalacao = porFuncao.get(funcao.id);
-    const perfil = escalacao
-      ? Array.isArray(escalacao.perfis)
-        ? (escalacao.perfis[0] ?? null)
-        : escalacao.perfis
-      : null;
-    return {
-      funcaoId: funcao.id,
-      funcaoNome: funcao.nome,
-      obrigatoria: funcao.obrigatoria,
-      escalacaoId: escalacao?.id ?? null,
-      perfilId: escalacao?.perfil_id ?? null,
-      perfilNome: perfil?.nome ?? null,
-      confirmacao: escalacao?.confirmacao ?? null,
-    };
-  });
+  return ((funcoesRes.data ?? []) as FuncaoRow[])
+    .filter((funcao) => funcao.ativo || porFuncao.has(funcao.id))
+    .map((funcao) => {
+      const escalacao = porFuncao.get(funcao.id);
+      const perfil = escalacao
+        ? Array.isArray(escalacao.perfis)
+          ? (escalacao.perfis[0] ?? null)
+          : escalacao.perfis
+        : null;
+      return {
+        funcaoId: funcao.id,
+        funcaoNome: funcao.nome,
+        obrigatoria: funcao.obrigatoria,
+        arquivada: !funcao.ativo,
+        escalacaoId: escalacao?.id ?? null,
+        perfilId: escalacao?.perfil_id ?? null,
+        perfilNome: perfil?.nome ?? null,
+        confirmacao: escalacao?.confirmacao ?? null,
+      };
+    });
 }
 
 /**
@@ -131,9 +161,25 @@ export async function definirEscalacao(
   escalaId: string,
   funcaoId: string,
   perfilId: string | null,
+  /**
+   * Id da escalação que está na função agora, quando há uma. Serve só para
+   * saber se o DELETE abaixo *tinha* o que apagar: sem isso, uma RLS que
+   * barrasse a remoção devolveria zero linhas com status 200, a tela mostraria
+   * a função esvaziada e a pessoa continuaria escalada no banco.
+   */
+  escalacaoAtualId: string | null = null,
 ): Promise<void> {
-  const remocao = await client.from("escalacoes").delete().eq("escala_id", escalaId).eq("funcao_id", funcaoId);
+  const remocao = await client
+    .from("escalacoes")
+    .delete()
+    .eq("escala_id", escalaId)
+    .eq("funcao_id", funcaoId)
+    .select("id");
   if (remocao.error) throw remocao.error;
+
+  if (escalacaoAtualId && (remocao.data ?? []).length === 0) {
+    throw new Error(semPermissao("esta escalação"));
+  }
 
   if (perfilId) {
     const insercao = await client
@@ -144,11 +190,43 @@ export async function definirEscalacao(
 }
 
 export async function publicarEscala(client: SupabaseClient, escalaId: string): Promise<void> {
-  const { error } = await client
+  const { data, error } = await client
     .from("escalas")
     .update({ status: "publicada", publicada_em: new Date().toISOString() })
-    .eq("id", escalaId);
+    .eq("id", escalaId)
+    .select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta escala"));
+}
+
+/**
+ * Volta a escala para rascunho. Publicar era via de mão única: se o líder
+ * publicasse por engano — ou percebesse um erro logo depois — a escala já
+ * estava visível para a igreja inteira e não havia como recolher.
+ *
+ * `publicada_em` volta a null de propósito: é a data que o relatório usa para
+ * saber que a escala valeu, e deixá-la preenchida numa escala em rascunho
+ * mentiria para o relatório.
+ */
+export async function despublicarEscala(client: SupabaseClient, escalaId: string): Promise<void> {
+  const { data, error } = await client
+    .from("escalas")
+    .update({ status: "rascunho", publicada_em: null })
+    .eq("id", escalaId)
+    .select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta escala"));
+}
+
+/**
+ * Apaga a escala inteira. Só faz sentido para rascunho vazio: como a escala
+ * nasce só de alguém abrir a URL de montar escala, rascunhos fantasma se
+ * acumulavam sem nenhuma forma de listar ou apagar.
+ */
+export async function removerEscala(client: SupabaseClient, escalaId: string): Promise<void> {
+  const { data, error } = await client.from("escalas").delete().eq("id", escalaId).select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta escala"));
 }
 
 export interface MinhaEscalacao {
@@ -167,12 +245,12 @@ interface MinhaEscalacaoRow {
   escalas:
     | {
         status: string;
-        eventos: { titulo: string; data_hora: string } | { titulo: string; data_hora: string }[] | null;
+        eventos: { titulo: string; data_hora: string; ativo: boolean } | { titulo: string; data_hora: string; ativo: boolean }[] | null;
         ministerios: { nome: string } | { nome: string }[] | null;
       }
     | {
         status: string;
-        eventos: { titulo: string; data_hora: string } | { titulo: string; data_hora: string }[] | null;
+        eventos: { titulo: string; data_hora: string; ativo: boolean } | { titulo: string; data_hora: string; ativo: boolean }[] | null;
         ministerios: { nome: string } | { nome: string }[] | null;
       }[]
     | null;
@@ -188,10 +266,14 @@ export async function listarMinhasEscalacoes(client: SupabaseClient, perfilId: s
   const { data, error } = await client
     .from("escalacoes")
     .select(
-      "id, confirmacao, funcoes(nome), escalas!inner(status, eventos(titulo, data_hora), ministerios(nome))",
+      "id, confirmacao, funcoes(nome), escalas!inner(status, eventos!inner(titulo, data_hora, ativo), ministerios(nome))",
     )
     .eq("perfil_id", perfilId)
-    .eq("escalas.status", "publicada");
+    .eq("escalas.status", "publicada")
+    // Evento arquivado (culto cancelado, data digitada errada) não aparece mais
+    // como compromisso de ninguém — mas a escalação continua no banco, para o
+    // relatório não mudar de ideia sobre o passado.
+    .eq("escalas.eventos.ativo", true);
   if (error) throw error;
 
   const resultado = ((data ?? []) as unknown as MinhaEscalacaoRow[]).map((linha) => {

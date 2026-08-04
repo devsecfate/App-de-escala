@@ -1,1 +1,166 @@
 @import "tailwindcss";
+
+/* ---------------------------------------------------------------------------
+ * Fonte
+ *
+ * Inter auto-hospedada (pacote `@fontsource-variable/inter`), nunca Google
+ * Fonts: o app precisa abrir offline (Fase 5) e requisição externa morre sem
+ * rede. Declaramos o @font-face à mão, em vez de importar o `wght.css` do
+ * pacote, porque aquele arquivo traz sete subconjuntos (cirílico, grego,
+ * vietnamita, latin-ext...) = 213 KB para dentro do precache. O app é pt-BR:
+ * todos os acentos (á é í ó ú ã õ ç) cabem no subconjunto latin, 47 KB.
+ *
+ * `font-display: swap` para o texto aparecer na fonte de sistema enquanto a
+ * Inter carrega — na primeira visita, antes do service worker existir.
+ * ------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("@fontsource-variable/inter/files/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308,
+    U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* `static`: o Tailwind normalmente joga fora a variável de tema que nenhuma
+   utility usou, e aqui isso quebraria coisa de verdade — o bloco de
+   `prefers-reduced-motion` mais abaixo zera `--duracao-lenta`, que sem `static`
+   nem chega a existir no `:root`. Tokens de design existem para serem lidos
+   também por `var()` escrito à mão, não só por classe. */
+@theme static {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+
+  /* Marca: azul-petróleo. O 700 é a cor fechada com o usuário (#0F766E). */
+  --color-marca-50: #f0fdfa;
+  --color-marca-100: #ccfbf1;
+  --color-marca-200: #99f6e4;
+  --color-marca-300: #5eead4;
+  --color-marca-400: #2dd4bf;
+  --color-marca-500: #14b8a6;
+  --color-marca-600: #0d9488;
+  --color-marca-700: #0f766e;
+  --color-marca-800: #115e59;
+  --color-marca-900: #134e4a;
+  --color-marca-950: #042f2e;
+
+  /* Superfícies e texto. Nomes semânticos para o tema escuro entrar depois
+     trocando só estes valores — as telas não precisam saber a cor. */
+  --color-fundo: #f8fafc;
+  --color-superficie: #ffffff;
+  --color-superficie-suave: #f1f5f9;
+  --color-borda: #e2e8f0;
+  --color-borda-forte: #cbd5e1;
+  --color-texto: #0f172a;
+  --color-texto-suave: #64748b;
+
+  --color-sucesso: #16a34a;
+  --color-sucesso-suave: #f0fdf4;
+  --color-sucesso-forte: #15803d;
+  --color-atencao: #ca8a04;
+  --color-atencao-suave: #fefce8;
+  --color-atencao-forte: #a16207;
+  --color-perigo: #dc2626;
+  --color-perigo-suave: #fef2f2;
+  --color-perigo-forte: #b91c1c;
+
+  --radius-cartao: 0.875rem;
+
+  --shadow-cartao: 0 1px 2px 0 rgb(15 23 42 / 0.04), 0 1px 3px 0 rgb(15 23 42 / 0.06);
+  --shadow-flutuante: 0 10px 30px -12px rgb(15 23 42 / 0.25);
+  --shadow-modal: 0 25px 50px -12px rgb(15 23 42 / 0.35);
+  /* Sombra colorida na cor da marca: é o "glow" do botão principal. */
+  --shadow-glow: 0 8px 24px -8px rgb(15 118 110 / 0.55);
+
+  --duracao-rapida: 150ms;
+  --duracao-media: 240ms;
+  --duracao-lenta: 400ms;
+
+  /* Mola: passa um pouco do alvo e volta. Usada em modal e press de botão. */
+  --ease-mola: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-saida: cubic-bezier(0.22, 1, 0.36, 1);
+
+  --animate-surgir: surgir var(--duracao-media) var(--ease-saida) both;
+  --animate-pulsar-suave: pulsar-suave 1.6s ease-in-out infinite;
+
+  @keyframes surgir {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes pulsar-suave {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.45;
+    }
+  }
+}
+
+:root {
+  /* Recortes do iPhone. A barra inferior de navegação soma isto ao próprio
+     padding para não ficar embaixo do home indicator. */
+  --area-segura-superior: env(safe-area-inset-top, 0px);
+  --area-segura-inferior: env(safe-area-inset-bottom, 0px);
+  --area-segura-esquerda: env(safe-area-inset-left, 0px);
+  --area-segura-direita: env(safe-area-inset-right, 0px);
+
+  /* Altura da barra de navegação do celular; o <main> reserva este espaço. */
+  --altura-barra-inferior: 4.25rem;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-fundo);
+    color: var(--color-texto);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Foco visível de verdade, e só no teclado — o anel do Tailwind sozinho
+     não aparece contra a cor da marca. */
+  :focus-visible {
+    outline: 2px solid var(--color-marca-600);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: var(--color-marca-100);
+    color: var(--color-marca-900);
+  }
+}
+
+/* Quem pediu menos movimento no sistema recebe o app inteiro sem movimento:
+   as durações dos tokens vão a zero (isso alcança o CSS e o `motion`, que lê
+   a mesma media query pelo hook em lib/movimento.ts). */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duracao-rapida: 0ms;
+    --duracao-media: 0ms;
+    --duracao-lenta: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

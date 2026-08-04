@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { motion } from "motion/react";
+import { ArrowLeft, Send, Share2, Trash2, Undo2, UserCog } from "lucide-react";
 import {
-  adicionarItemCronograma,
-  atualizarItemCronograma,
   definirEscalacao,
+  despublicarEscala,
   funcoesObrigatoriasFaltando,
   gerarTextoEscala,
   linkWhatsApp,
@@ -12,10 +13,6 @@ import {
   listarEscalacoesPorFuncao,
   listarMembrosDoMinisterio,
   listarMusicas,
-  moverItem,
-  proximaOrdem,
-  removerItemCronograma,
-  salvarOrdemCronograma,
   obterContextoValidacaoEscalacao,
   obterEvento,
   obterMinisterio,
@@ -23,6 +20,7 @@ import {
   obterUltimoEnvio,
   publicarEscala,
   registrarEnvio,
+  removerEscala,
   validarEscalacao,
   type CategoriaMusica,
   type Envio,
@@ -37,23 +35,24 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
-
-function formatarDataHora(iso: string): string {
-  return new Date(iso).toLocaleString("pt-BR", {
-    weekday: "long",
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
-function rotuloConfirmacao(confirmacao: string | null): { texto: string; classe: string } | null {
-  if (!confirmacao) return null;
-  if (confirmacao === "confirmado") return { texto: "Confirmado", classe: "bg-emerald-100 text-emerald-700" };
-  if (confirmacao === "recusado") return { texto: "Não vai", classe: "bg-red-100 text-red-700" };
-  return { texto: "Aguardando confirmação", classe: "bg-amber-100 text-amber-700" };
-}
+import { Cronograma } from "../components/escala/Cronograma";
+import {
+  Alerta,
+  Badge,
+  BadgeConfirmacao,
+  Botao,
+  BotaoLink,
+  CampoSelect,
+  Card,
+  ConfirmarAcao,
+  EsqueletoLista,
+  EstadoVazio,
+  MenuAcoes,
+  TituloPagina,
+} from "../components/ui";
+import { itemDaLista, listaEmCascata } from "../lib/movimento";
+import { formatarDataHora } from "../lib/formato";
+import { mensagemDeErro } from "../lib/erros-auth";
 
 interface MensagensValidacao {
   bloqueios: string[];
@@ -63,6 +62,7 @@ interface MensagensValidacao {
 export function MontarEscala() {
   const { eventoId, ministerioId } = useParams<{ eventoId: string; ministerioId: string }>();
   const { perfil } = useAuth();
+  const navegar = useNavigate();
 
   const [evento, setEvento] = useState<Evento | null>(null);
   const [ministerio, setMinisterio] = useState<Ministerio | null>(null);
@@ -77,11 +77,11 @@ export function MontarEscala() {
   const [cronograma, setCronograma] = useState<ItemCronograma[]>([]);
   const [repertorio, setRepertorio] = useState<Musica[]>([]);
   const [categorias, setCategorias] = useState<CategoriaMusica[]>([]);
-  const [musicaParaAdicionar, setMusicaParaAdicionar] = useState("");
+  const [despublicando, setDespublicando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
 
-  async function carregar() {
+  const carregar = useCallback(async () => {
     if (!eventoId || !ministerioId || !perfil) return;
-    setCarregando(true);
     setErro(null);
     try {
       const [eventoCarregado, ministerioCarregado, membrosCarregados] = await Promise.all([
@@ -95,6 +95,7 @@ export function MontarEscala() {
 
       const escalaAtual = await obterOuCriarEscala(supabase, eventoId, ministerioId, perfil.id);
       setEscala(escalaAtual);
+
       const [linhasCarregadas, envioCarregado, cronogramaCarregado, repertorioCarregado, categoriasCarregadas] =
         await Promise.all([
           listarEscalacoesPorFuncao(supabase, escalaAtual.id, ministerioId),
@@ -108,28 +109,27 @@ export function MontarEscala() {
       setCronograma(cronogramaCarregado);
       setRepertorio(repertorioCarregado);
       setCategorias(categoriasCarregadas);
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível carregar a escala.");
+    } catch (problema) {
+      setErro(mensagemDeErro(problema, "Não foi possível carregar a escala."));
     } finally {
       setCarregando(false);
     }
-  }
+  }, [eventoId, ministerioId, perfil]);
 
   useEffect(() => {
     void carregar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [eventoId, ministerioId, perfil?.id]);
+  }, [carregar]);
 
-  async function handleAlterarEscalacao(funcaoId: string, perfilId: string) {
+  async function alterarEscalacao(linha: EscalacaoDaFuncao, perfilId: string) {
     if (!escala || !evento || !ministerioId) return;
     setErro(null);
-    setMensagensPorFuncao((atual) => ({ ...atual, [funcaoId]: { bloqueios: [], avisos: [] } }));
+    setMensagensPorFuncao((atual) => ({ ...atual, [linha.funcaoId]: { bloqueios: [], avisos: [] } }));
     try {
       if (perfilId) {
         const contexto = await obterContextoValidacaoEscalacao(supabase, {
           pessoaId: perfilId,
           ministerioId,
-          funcaoId,
+          funcaoId: linha.funcaoId,
           dataEvento: evento.dataHora.slice(0, 10),
           eventoId: evento.id,
           escalaId: escala.id,
@@ -138,21 +138,21 @@ export function MontarEscala() {
         if (resultado.bloqueios.length > 0) {
           setMensagensPorFuncao((atual) => ({
             ...atual,
-            [funcaoId]: { bloqueios: resultado.bloqueios.map((b) => b.mensagem), avisos: [] },
+            [linha.funcaoId]: { bloqueios: resultado.bloqueios.map((b) => b.mensagem), avisos: [] },
           }));
           return;
         }
         if (resultado.avisos.length > 0) {
           setMensagensPorFuncao((atual) => ({
             ...atual,
-            [funcaoId]: { bloqueios: [], avisos: resultado.avisos.map((a) => a.mensagem) },
+            [linha.funcaoId]: { bloqueios: [], avisos: resultado.avisos.map((a) => a.mensagem) },
           }));
         }
       }
-      await definirEscalacao(supabase, escala.id, funcaoId, perfilId || null);
+      await definirEscalacao(supabase, escala.id, linha.funcaoId, perfilId || null, linha.escalacaoId);
       setLinhas(await listarEscalacoesPorFuncao(supabase, escala.id, ministerioId));
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível salvar a escalação.");
+    } catch (problema) {
+      setErro(mensagemDeErro(problema, "Não foi possível salvar a escalação."));
     }
   }
 
@@ -161,58 +161,7 @@ export function MontarEscala() {
     setCronograma(await listarCronograma(supabase, escala.id));
   }
 
-  async function handleAdicionarMusica() {
-    if (!escala || !musicaParaAdicionar) return;
-    setErro(null);
-    try {
-      await adicionarItemCronograma(supabase, escala.id, {
-        musicaId: musicaParaAdicionar,
-        ordem: proximaOrdem(cronograma),
-      });
-      setMusicaParaAdicionar("");
-      await recarregarCronograma();
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível adicionar a música.");
-    }
-  }
-
-  async function handleMoverMusica(indice: number, direcao: -1 | 1) {
-    const destino = indice + direcao;
-    if (destino < 0 || destino >= cronograma.length) return;
-
-    // Mostra a nova ordem na hora; o banco confirma logo atrás.
-    const reordenado = moverItem(cronograma, indice, destino);
-    setCronograma(reordenado);
-    try {
-      await salvarOrdemCronograma(supabase, reordenado.map((item) => item.id));
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível reordenar o cronograma.");
-      await recarregarCronograma();
-    }
-  }
-
-  async function handleAtualizarItem(
-    itemId: string,
-    campos: { tomDoDia?: string | null; momento?: string | null },
-  ) {
-    try {
-      await atualizarItemCronograma(supabase, itemId, campos);
-      await recarregarCronograma();
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível salvar a música.");
-    }
-  }
-
-  async function handleRemoverItem(itemId: string) {
-    try {
-      await removerItemCronograma(supabase, itemId);
-      await recarregarCronograma();
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível remover a música.");
-    }
-  }
-
-  async function handleCompartilhar() {
+  async function compartilhar() {
     if (!escala || !evento || !ministerio) return;
     setErro(null);
 
@@ -235,39 +184,50 @@ export function MontarEscala() {
       } else {
         window.open(linkWhatsApp(texto), "_blank", "noopener");
       }
-    } catch (error) {
-      // O usuário fechar a folha de compartilhamento não é erro nem envio.
-      if (error instanceof DOMException && error.name === "AbortError") return;
-      setErro(error instanceof Error ? error.message : "Não foi possível compartilhar a escala.");
+    } catch (problema) {
+      // Fechar a folha de compartilhamento não é erro nem envio.
+      if (problema instanceof DOMException && problema.name === "AbortError") return;
+      setErro(mensagemDeErro(problema, "Não foi possível compartilhar a escala."));
       return;
     }
 
     try {
       setUltimoEnvio(await registrarEnvio(supabase, escala.id, "whatsapp"));
     } catch {
-      // A escala já foi compartilhada; o histórico é secundário e não vale
-      // alarmar o líder com um erro vermelho se só o registro falhou.
+      // A escala já saiu; o histórico é secundário e não vale um erro vermelho.
     }
   }
 
-  async function handlePublicar() {
+  async function publicar() {
     if (!escala) return;
     setPublicando(true);
     setErro(null);
     try {
       await publicarEscala(supabase, escala.id);
       setEscala({ ...escala, status: "publicada", publicadaEm: new Date().toISOString() });
-    } catch (error) {
-      setErro(error instanceof Error ? error.message : "Não foi possível publicar a escala.");
+    } catch (problema) {
+      setErro(mensagemDeErro(problema, "Não foi possível publicar a escala."));
     } finally {
       setPublicando(false);
     }
   }
 
+  async function confirmarDespublicar() {
+    if (!escala) return;
+    await despublicarEscala(supabase, escala.id);
+    setEscala({ ...escala, status: "rascunho", publicadaEm: null });
+  }
+
+  async function confirmarExclusao() {
+    if (!escala) return;
+    await removerEscala(supabase, escala.id);
+    navegar("/eventos");
+  }
+
   if (carregando) {
     return (
       <Layout>
-        <p className="text-sm text-slate-500">Carregando...</p>
+        <EsqueletoLista linhas={4} />
       </Layout>
     );
   }
@@ -275,61 +235,126 @@ export function MontarEscala() {
   if (!evento || !ministerio || !escala) {
     return (
       <Layout>
-        <p className="text-sm text-red-600">Não foi possível encontrar este evento ou ministério.</p>
+        <EstadoVazio
+          titulo="Escala não encontrada"
+          descricao="O evento ou o ministério pode ter sido excluído."
+          acao={
+            <BotaoLink to="/eventos" icone={<ArrowLeft aria-hidden className="size-4" />}>
+              Voltar para a agenda
+            </BotaoLink>
+          }
+        />
       </Layout>
     );
   }
 
+  const publicada = escala.status === "publicada";
+  const escaladas = linhas.filter((linha) => linha.perfilId).length;
+  const vazia = escaladas === 0 && cronograma.length === 0;
   const faltando = funcoesObrigatoriasFaltando(
-    linhas.filter((l) => l.obrigatoria).map((l) => ({ id: l.funcaoId, nome: l.funcaoNome })),
-    linhas.filter((l) => l.perfilId).map((l) => l.funcaoId),
+    linhas.filter((linha) => linha.obrigatoria).map((linha) => ({ id: linha.funcaoId, nome: linha.funcaoNome })),
+    linhas.filter((linha) => linha.perfilId).map((linha) => linha.funcaoId),
   );
 
   return (
     <Layout>
-      <p className="text-sm text-slate-500">{ministerio.nome}</p>
-      <h1 className="text-lg font-semibold text-slate-900">{evento.titulo}</h1>
-      <p className="text-sm text-slate-500">{formatarDataHora(evento.dataHora)}</p>
+      <button
+        type="button"
+        onClick={() => navegar(-1)}
+        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-texto-suave transition hover:text-texto"
+      >
+        <ArrowLeft aria-hidden className="size-4" />
+        Voltar
+      </button>
 
-      <div className="mt-2">
-        <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-            escala.status === "publicada" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-          }`}
-        >
-          {escala.status === "publicada" ? "Publicada" : "Rascunho"}
-        </span>
+      <TituloPagina
+        descricao={`${ministerio.nome} · ${formatarDataHora(evento.dataHora)}`}
+        acoes={
+          <MenuAcoes
+            rotulo="Ações da escala"
+            acoes={[
+              {
+                rotulo: "Voltar para rascunho",
+                icone: <Undo2 aria-hidden className="size-4" />,
+                desabilitada: !publicada,
+                detalhe: publicada
+                  ? "Some da tela de quem foi escalado até você publicar de novo."
+                  : "A escala já é um rascunho.",
+                aoEscolher: () => setDespublicando(true),
+              },
+              {
+                rotulo: "Excluir esta escala",
+                icone: <Trash2 aria-hidden className="size-4" />,
+                tom: "perigo",
+                desabilitada: !vazia,
+                detalhe: vazia
+                  ? "Rascunho vazio: some sem deixar rastro."
+                  : "Tire todo mundo da escala antes de excluí-la.",
+                aoEscolher: () => setExcluindo(true),
+              },
+            ]}
+          />
+        }
+      >
+        {evento.titulo}
+      </TituloPagina>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Badge tom={publicada ? "sucesso" : "atencao"}>{publicada ? "Publicada" : "Rascunho"}</Badge>
+        <Badge tom="neutro">
+          {escaladas} de {linhas.length} {linhas.length === 1 ? "função preenchida" : "funções preenchidas"}
+        </Badge>
+        {!publicada && (
+          <span className="text-sm text-texto-suave">Ninguém vê esta escala até você publicar.</span>
+        )}
       </div>
 
-      {erro && <p className="mt-4 text-sm text-red-600">{erro}</p>}
+      {erro && (
+        <Alerta className="mt-4" tipo="erro">
+          {erro}
+        </Alerta>
+      )}
 
-      {linhas.length === 0 ? (
-        <p className="mt-6 text-sm text-slate-500">
-          Este ministério ainda não tem funções cadastradas. Cadastre pelo menos uma em
-          Ministérios → {ministerio.nome}.
-        </p>
-      ) : (
-        <ul className="mt-6 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
-          {linhas.map((linha) => {
-            const mensagens = mensagensPorFuncao[linha.funcaoId];
-            const confirmacao = rotuloConfirmacao(linha.confirmacao);
-            return (
-              <li key={linha.funcaoId} className="px-4 py-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-slate-900">{linha.funcaoNome}</p>
-                    {linha.obrigatoria && <p className="text-xs text-amber-600">obrigatória</p>}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {confirmacao && (
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${confirmacao.classe}`}>
-                        {confirmacao.texto}
-                      </span>
-                    )}
-                    <select
+      {faltando.length > 0 && (
+        <Alerta className="mt-4" tipo="aviso" titulo="Funções obrigatórias vazias">
+          Ainda falta gente em: {faltando.map((funcao) => funcao.nome).join(", ")}.
+        </Alerta>
+      )}
+
+      <div className="mt-6">
+        {linhas.length === 0 ? (
+          <EstadoVazio
+            icone={<UserCog aria-hidden className="size-6" />}
+            titulo="Este ministério não tem funções"
+            descricao="Sem função cadastrada não há o que preencher. Cadastre pelo menos uma na tela do ministério."
+            acao={
+              <BotaoLink variante="primario" to={`/ministerios/${ministerio.id}`}>
+                Abrir {ministerio.nome}
+              </BotaoLink>
+            }
+          />
+        ) : (
+          <motion.ul variants={listaEmCascata} initial="oculto" animate="visivel" className="space-y-3">
+            {linhas.map((linha) => {
+              const mensagens = mensagensPorFuncao[linha.funcaoId];
+              return (
+                <motion.li key={linha.funcaoId} variants={itemDaLista}>
+                  <Card>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold text-texto">{linha.funcaoNome}</span>
+                        {linha.obrigatoria && <Badge tom="atencao">Obrigatória</Badge>}
+                        {linha.arquivada && <Badge tom="neutro">Função arquivada</Badge>}
+                      </div>
+                      <BadgeConfirmacao confirmacao={linha.confirmacao} pontoDeVista="lider" />
+                    </div>
+
+                    <CampoSelect
+                      rotulo={`Quem serve em ${linha.funcaoNome}`}
+                      rotuloOculto
+                      classeContainer="mt-3"
                       value={linha.perfilId ?? ""}
-                      onChange={(event) => void handleAlterarEscalacao(linha.funcaoId, event.target.value)}
-                      className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                      onChange={(evento) => void alterarEscalacao(linha, evento.target.value)}
                     >
                       <option value="">Ninguém escalado</option>
                       {membros.map((membro) => (
@@ -337,165 +362,83 @@ export function MontarEscala() {
                           {membro.nome}
                         </option>
                       ))}
-                    </select>
-                  </div>
-                </div>
+                    </CampoSelect>
 
-                {mensagens?.bloqueios.map((mensagem, indice) => (
-                  <p key={`b-${indice}`} className="mt-1.5 text-xs text-red-600">
-                    {mensagem}
-                  </p>
-                ))}
-                {mensagens?.avisos.map((mensagem, indice) => (
-                  <p key={`a-${indice}`} className="mt-1.5 text-xs text-amber-600">
-                    {mensagem}
-                  </p>
-                ))}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-
-      {faltando.length > 0 && (
-        <p className="mt-3 text-sm text-amber-600">
-          Ainda faltam pessoas nas funções obrigatórias: {faltando.map((f) => f.nome).join(", ")}.
-        </p>
-      )}
-
-      {/* Só faz sentido para ministério que mantém repertório (louvor). */}
-      {(repertorio.length > 0 || cronograma.length > 0) && (
-        <section className="mt-8">
-          <h2 className="text-sm font-semibold text-slate-700">Cronograma do culto</h2>
-
-          {cronograma.length === 0 ? (
-            <p className="mt-2 text-sm text-slate-500">Nenhuma música no cronograma ainda.</p>
-          ) : (
-            <ol className="mt-2 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
-              {cronograma.map((item, indice) => (
-                <li key={item.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                  <span className="text-sm text-slate-400">{indice + 1}.</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-slate-900">{item.musicaTitulo}</p>
-                    {item.musicaTom && (
-                      <p className="text-xs text-slate-500">tom original: {item.musicaTom}</p>
-                    )}
-                  </div>
-
-                  <input
-                    type="text"
-                    placeholder="Tom do dia"
-                    defaultValue={item.tomDoDia ?? ""}
-                    onBlur={(event) => {
-                      const valor = event.target.value.trim();
-                      if (valor !== (item.tomDoDia ?? "")) {
-                        void handleAtualizarItem(item.id, { tomDoDia: valor || null });
-                      }
-                    }}
-                    className="w-24 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                  />
-
-                  <select
-                    value={item.momento ?? ""}
-                    onChange={(event) =>
-                      void handleAtualizarItem(item.id, { momento: event.target.value || null })
-                    }
-                    className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
-                  >
-                    <option value="">Momento</option>
-                    {categorias.map((categoria) => (
-                      <option key={categoria.id} value={categoria.nome}>
-                        {categoria.nome}
-                      </option>
+                    {mensagens?.bloqueios.map((mensagem) => (
+                      <Alerta key={mensagem} className="mt-2" tipo="erro">
+                        {mensagem}
+                      </Alerta>
                     ))}
-                  </select>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleMoverMusica(indice, -1)}
-                      disabled={indice === 0}
-                      className="rounded border border-slate-300 px-2 text-sm text-slate-600 disabled:opacity-30"
-                      aria-label={`Subir ${item.musicaTitulo}`}
-                    >
-                      ↑
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleMoverMusica(indice, 1)}
-                      disabled={indice === cronograma.length - 1}
-                      className="rounded border border-slate-300 px-2 text-sm text-slate-600 disabled:opacity-30"
-                      aria-label={`Descer ${item.musicaTitulo}`}
-                    >
-                      ↓
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => void handleRemoverItem(item.id)}
-                      className="text-xs text-red-600 underline hover:text-red-700"
-                    >
-                      Remover
-                    </button>
-                  </div>
-                </li>
-              ))}
-            </ol>
-          )}
-
-          {repertorio.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              <select
-                value={musicaParaAdicionar}
-                onChange={(event) => setMusicaParaAdicionar(event.target.value)}
-                className="flex-1 rounded-lg border border-slate-300 px-2 py-2 text-sm sm:flex-none"
-              >
-                <option value="">Escolha uma música do repertório...</option>
-                {repertorio.map((musica) => (
-                  <option key={musica.id} value={musica.id}>
-                    {musica.titulo}
-                    {musica.tom ? ` (${musica.tom})` : ""}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={() => void handleAdicionarMusica()}
-                disabled={!musicaParaAdicionar}
-                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-              >
-                Adicionar
-              </button>
-            </div>
-          )}
-        </section>
-      )}
-
-      <div className="mt-6 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void handlePublicar()}
-          disabled={publicando || escala.status === "publicada"}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {escala.status === "publicada" ? "Escala publicada" : publicando ? "Publicando..." : "Publicar escala"}
-        </button>
-
-        {escala.status === "publicada" && (
-          <button
-            type="button"
-            onClick={() => void handleCompartilhar()}
-            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
-          >
-            Compartilhar no WhatsApp
-          </button>
+                    {mensagens?.avisos.map((mensagem) => (
+                      <Alerta key={mensagem} className="mt-2" tipo="aviso">
+                        {mensagem}
+                      </Alerta>
+                    ))}
+                  </Card>
+                </motion.li>
+              );
+            })}
+          </motion.ul>
         )}
       </div>
 
-      {escala.status === "publicada" && ultimoEnvio?.enviadoEm && (
-        <p className="mt-2 text-xs text-slate-500">
+      {/* Só faz sentido para ministério que mantém repertório (louvor). */}
+      {(repertorio.length > 0 || cronograma.length > 0) && escala && (
+        <Cronograma
+          escalaId={escala.id}
+          itens={cronograma}
+          repertorio={repertorio}
+          categorias={categorias}
+          aoMudar={recarregarCronograma}
+          definirItens={setCronograma}
+        />
+      )}
+
+      <div className="mt-8 flex flex-col gap-2 sm:flex-row">
+        {!publicada ? (
+          <Botao
+            tamanho="grande"
+            icone={<Send aria-hidden className="size-4" />}
+            carregando={publicando}
+            onClick={() => void publicar()}
+          >
+            Publicar escala
+          </Botao>
+        ) : (
+          <Botao
+            tamanho="grande"
+            icone={<Share2 aria-hidden className="size-4" />}
+            onClick={() => void compartilhar()}
+          >
+            Compartilhar no WhatsApp
+          </Botao>
+        )}
+      </div>
+
+      {publicada && ultimoEnvio?.enviadoEm && (
+        <p className="mt-2 text-sm text-texto-suave">
           Compartilhada pela última vez em {formatarDataHora(ultimoEnvio.enviadoEm)}.
         </p>
       )}
+
+      <ConfirmarAcao
+        aberto={despublicando}
+        aoFechar={() => setDespublicando(false)}
+        titulo="Voltar a escala para rascunho?"
+        descricao="Ela some da tela de quem foi escalado até você publicar de novo. Quem já confirmou presença continua confirmado."
+        rotuloConfirmar="Voltar para rascunho"
+        variante="primario"
+        aoConfirmar={confirmarDespublicar}
+      />
+
+      <ConfirmarAcao
+        aberto={excluindo}
+        aoFechar={() => setExcluindo(false)}
+        titulo="Excluir esta escala?"
+        descricao="Ela está vazia, então nada de histórico se perde. Abrir esta tela de novo cria um rascunho novo."
+        rotuloConfirmar="Excluir"
+        aoConfirmar={confirmarExclusao}
+      />
     </Layout>
   );
 }

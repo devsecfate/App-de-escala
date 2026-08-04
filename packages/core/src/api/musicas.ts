@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "../supabase.js";
 import type { CampoMusica, CategoriaMusica, Musica } from "../types.js";
+import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 // ---------------------------------------------------------------------------
 // Músicas
@@ -119,8 +120,28 @@ export async function definirMusicaAtiva(
   musicaId: string,
   ativa: boolean,
 ): Promise<void> {
-  const { error } = await client.from("musicas").update({ ativa }).eq("id", musicaId);
+  const { data, error } = await client.from("musicas").update({ ativa }).eq("id", musicaId).select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta música"));
+}
+
+/**
+ * Apaga a música de vez. Só para música digitada errada que nunca entrou em
+ * cronograma nenhum: `cronograma_itens.musica_id` é `on delete restrict`, então
+ * o próprio banco recusa se ela já foi cantada. `contarUsosDaMusica` existe para
+ * a tela explicar isso antes, em vez de deixar o erro do Postgres chegar cru.
+ */
+export async function removerMusica(client: SupabaseClient, musicaId: string): Promise<void> {
+  const { data, error } = await client.from("musicas").delete().eq("id", musicaId).select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta música"));
+}
+
+/** Em quantos cronogramas esta música já apareceu. */
+export async function contarUsosDaMusica(client: SupabaseClient, musicaId: string): Promise<number> {
+  const { data, error } = await client.rpc("contar_usos_da_musica", { p_musica_id: musicaId });
+  if (error) throw error;
+  return (data as number | null) ?? 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -166,9 +187,35 @@ export async function criarCategoriaMusica(
   return mapCategoria(data as CategoriaRow);
 }
 
-export async function removerCategoriaMusica(client: SupabaseClient, categoriaId: string): Promise<void> {
-  const { error } = await client.from("categorias_musica").delete().eq("id", categoriaId);
+export async function atualizarCategoriaMusica(
+  client: SupabaseClient,
+  categoriaId: string,
+  campos: { nome?: string; ordem?: number },
+): Promise<CategoriaMusica> {
+  const atualizacao: Record<string, unknown> = {};
+  if (typeof campos.nome === "string") atualizacao.nome = campos.nome;
+  if (typeof campos.ordem === "number") atualizacao.ordem = campos.ordem;
+
+  const { data, error } = await client
+    .from("categorias_musica")
+    .update(atualizacao)
+    .eq("id", categoriaId)
+    .select("id, ministerio_id, nome, ordem");
   if (error) throw error;
+
+  const linhas = (data ?? []) as CategoriaRow[];
+  if (linhas.length === 0) throw new Error(semPermissao("esta categoria"));
+  return mapCategoria(linhas[0]!);
+}
+
+export async function removerCategoriaMusica(client: SupabaseClient, categoriaId: string): Promise<void> {
+  const { data, error } = await client
+    .from("categorias_musica")
+    .delete()
+    .eq("id", categoriaId)
+    .select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta categoria"));
 }
 
 // ---------------------------------------------------------------------------
@@ -225,9 +272,43 @@ export async function criarCampoMusica(
   return mapCampo(data as CampoRow);
 }
 
-export async function removerCampoMusica(client: SupabaseClient, campoId: string): Promise<void> {
-  const { error } = await client.from("campos_musica").delete().eq("id", campoId);
+/**
+ * Renomear a coluna e/ou mudar a posição dela.
+ *
+ * `chave` fica deliberadamente de fora: ela é o que indexa `musicas.extras`, e
+ * trocá-la exigiria reescrever o jsonb de todas as músicas do ministério numa
+ * operação sem transação do lado do cliente — qualquer falha no meio deixaria
+ * parte do repertório com a chave velha e parte com a nova, e os valores
+ * digitados ficariam órfãos, invisíveis na tela mas ocupando espaço.
+ *
+ * O líder nunca vê a chave; ele vê o rótulo. Manter a chave estável resolve o
+ * problema por não criá-lo.
+ */
+export async function atualizarCampoMusica(
+  client: SupabaseClient,
+  campoId: string,
+  campos: { rotulo?: string; ordem?: number },
+): Promise<CampoMusica> {
+  const atualizacao: Record<string, unknown> = {};
+  if (typeof campos.rotulo === "string") atualizacao.rotulo = campos.rotulo;
+  if (typeof campos.ordem === "number") atualizacao.ordem = campos.ordem;
+
+  const { data, error } = await client
+    .from("campos_musica")
+    .update(atualizacao)
+    .eq("id", campoId)
+    .select("id, ministerio_id, chave, rotulo, ordem");
   if (error) throw error;
+
+  const linhas = (data ?? []) as CampoRow[];
+  if (linhas.length === 0) throw new Error(semPermissao("esta coluna"));
+  return mapCampo(linhas[0]!);
+}
+
+export async function removerCampoMusica(client: SupabaseClient, campoId: string): Promise<void> {
+  const { data, error } = await client.from("campos_musica").delete().eq("id", campoId).select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta coluna"));
 }
 
 /**

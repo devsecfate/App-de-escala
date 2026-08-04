@@ -30,7 +30,7 @@ npx supabase db push
 
 Os dois pedem a senha do banco (a de 1.1) no terminal, então rode você mesmo.
 
-Isso aplica as 5 migrations de `supabase/migrations/` na nuvem, incluindo a de GRANTs — sem ela, toda query responde "permission denied" mesmo com RLS correta.
+Isso aplica as migrations de `supabase/migrations/` na nuvem, incluindo a de GRANTs — sem ela, toda query responde "permission denied" mesmo com RLS correta.
 
 **O `supabase/seed.sql` não vai para a nuvem**, de propósito: ele cria usuários de teste com senha conhecida. Na nuvem, a igreja nasce pelo caminho real — você se cadastra pelo app e a tela de onboarding cria a igreja e te deixa admin.
 
@@ -41,15 +41,32 @@ No painel: **Authentication → URL Configuration**.
 - **Site URL:** a URL da Vercel (ex.: `https://app-de-escala.vercel.app`)
 - **Redirect URLs:** a mesma URL com `/*` no fim
 
-Sem isso, o link mágico e o e-mail de convite mandam a pessoa para `localhost:3000` — o convite "não funciona" e não é óbvio por quê.
+Sem isso, o link mágico e o link de "esqueci minha senha" mandam a pessoa para `localhost:3000` — "não funciona" e não é óbvio por quê.
 
-### 1.4 E-mail de verdade
+### 1.4 Cadastro sem confirmação de e-mail
 
-O SMTP embutido do Supabase serve para testar e só: poucos e-mails por hora e **só para endereços da sua organização**. O convite de membro (`convidar-membro`) depende disso.
+No painel: **Authentication → Sign In / Providers → Email**.
 
-Para a igreja usar, configure SMTP próprio em **Project Settings → Auth → SMTP Settings** (Resend, Brevo, Amazon SES — todos com camada gratuita suficiente para uma igreja).
+- **Confirm email:** **desligado** (equivale a `mailer_autoconfirm = true`).
+- **Allow new users to sign up:** ligado.
 
-### 1.5 Edge Functions
+Isto é decisão de produto da Etapa 6, não descuido. O projeto não tem SMTP próprio, e o servidor embutido do Supabase entrega **só para o e-mail do dono do projeto**: com a confirmação ligada, ninguém da igreja passaria da primeira tela — o app ficaria inaugurado e inutilizável.
+
+Não abre buraco: quem cria uma conta sem convite **não enxerga absolutamente nada**. A RLS isola tudo por igreja e, sem perfil, `minha_igreja()` é `null` e nenhuma policy casa. Quem dá acesso é o **código do convite** gerado pelo líder, não o e-mail.
+
+O mesmo vale localmente — `enable_confirmations = false` em `supabase/config.toml`.
+
+### 1.5 E-mail de verdade (opcional)
+
+O SMTP embutido serve para testar e só: poucos e-mails por hora e **só para endereços da sua organização**.
+
+Depois da Etapa 6, **entrar na igreja não depende mais de e-mail**: o líder gera um código no app e manda por onde quiser. O e-mail só é usado para "Esqueci minha senha".
+
+Para a igreja usar o "esqueci minha senha" de verdade, configure SMTP próprio em **Project Settings → Auth → SMTP Settings** (Resend, Brevo, Amazon SES — todos com camada gratuita suficiente para uma igreja).
+
+> **A conta `guibeloliv@gmail.com` de produção nasceu por link mágico e não tem senha.** Para definir uma: na tela de login, "Esqueci minha senha". O SMTP embutido entrega para o dono do projeto, então esse caso específico funciona sem configurar nada.
+
+### 1.6 Edge Functions
 
 ```bash
 npx supabase functions deploy convidar-membro
@@ -71,7 +88,7 @@ npx supabase secrets set \
 
 A chave **pública** também vai para a Vercel, como `VITE_VAPID_PUBLIC_KEY`. A privada nunca sai daqui.
 
-### 1.6 Lembrete diário
+### 1.7 Lembrete diário
 
 Com o projeto no ar, o agendamento finalmente tem onde existir. No **SQL Editor** do painel:
 
@@ -90,7 +107,7 @@ select cron.schedule(
 
 Confira depois com `select * from cron.job;`.
 
-### 1.7 Chaves legadas desligadas
+### 1.8 Chaves legadas desligadas
 
 O Supabase entrega dois conjuntos de chaves: as **legadas** (`anon` e
 `service_role`, JWTs estáticos assinados em HS256) e as **novas**
@@ -176,7 +193,7 @@ Volte ao passo 1.3 e coloque a URL da Vercel no Supabase.
 
 Abra a URL da Vercel no celular (HTTPS de verdade, que é o que o service worker exige):
 
-1. **Cadastre-se** e passe pelo onboarding: cria a igreja e te deixa admin.
+1. **Cadastre-se** (nome, e-mail e senha) e passe pelo onboarding: "Sou eu quem administra a igreja" cria a igreja e te deixa admin. Depois gere um código de convite e teste em outro aparelho (ou numa janela anônima) o caminho de quem é convidado.
 2. **Instalar:** Android → o cartão "Instalar na tela inicial" ou o menu do Chrome; iPhone → Compartilhar → "Adicionar à Tela de Início". O ícone tem que sair certo, sem fundo branco nem corte.
 3. **Abrir pelo atalho:** tem que abrir em tela cheia, sem barra de endereço.
 4. **Offline:** navegue pelas telas, ligue o modo avião e **recarregue**. A escala tem que continuar aparecendo, com a faixa âmbar no topo.

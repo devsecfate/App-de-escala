@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "../supabase.js";
 import type { PapelMinisterio } from "../types.js";
+import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 export interface MembroMinisterioComPerfil {
   id: string; // id da linha em membros_ministerio
@@ -55,14 +56,32 @@ export async function definirPapelDoMembro(
   membroMinisterioId: string,
   papel: PapelMinisterio,
 ): Promise<void> {
-  const { error } = await client.from("membros_ministerio").update({ papel }).eq("id", membroMinisterioId);
+  const { data, error } = await client
+    .from("membros_ministerio")
+    .update({ papel })
+    .eq("id", membroMinisterioId)
+    .select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("o papel desta pessoa"));
 }
 
-/** Remoção lógica: marca o vínculo como inativo em vez de apagar (preserva histórico de escalações). */
+/**
+ * Remoção lógica: marca o vínculo como inativo em vez de apagar (preserva
+ * histórico de escalações).
+ *
+ * O banco recusa se for o último líder ativo do ministério (trigger
+ * `membros_ministerio_protege_ultimo_lider`) — antes disso, o líder podia
+ * remover a si mesmo e deixar o ministério sem ninguém capaz de montar escala,
+ * nem de se readicionar, porque a policy de INSERT exige ser líder.
+ */
 export async function removerMembro(client: SupabaseClient, membroMinisterioId: string): Promise<void> {
-  const { error } = await client.from("membros_ministerio").update({ ativo: false }).eq("id", membroMinisterioId);
+  const { data, error } = await client
+    .from("membros_ministerio")
+    .update({ ativo: false })
+    .eq("id", membroMinisterioId)
+    .select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("esta pessoa"));
 }
 
 /** Adiciona ao ministério alguém que já tem perfil na igreja (já serve em outro ministério, por exemplo). */

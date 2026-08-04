@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "../supabase.js";
 import type { Indisponibilidade } from "../types.js";
+import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 interface IndisponibilidadeRow {
   id: string;
@@ -51,7 +52,32 @@ export async function criarIndisponibilidade(
   return mapIndisponibilidade(data as IndisponibilidadeRow);
 }
 
-export async function removerIndisponibilidade(client: SupabaseClient, id: string): Promise<void> {
-  const { error } = await client.from("indisponibilidades").delete().eq("id", id);
+/** Corrigir as datas ou o motivo de um período já cadastrado. */
+export async function atualizarIndisponibilidade(
+  client: SupabaseClient,
+  id: string,
+  campos: { dataInicio?: string; dataFim?: string | null; motivo?: string | null },
+): Promise<Indisponibilidade> {
+  const atualizacao: Record<string, unknown> = {};
+  if (typeof campos.dataInicio === "string") atualizacao.data_inicio = campos.dataInicio;
+  if ("dataFim" in campos) atualizacao.data_fim = campos.dataFim ?? null;
+  if ("motivo" in campos) atualizacao.motivo = campos.motivo ?? null;
+
+  const { data, error } = await client
+    .from("indisponibilidades")
+    .update(atualizacao)
+    .eq("id", id)
+    .select(COLUNAS_INDISPONIBILIDADE);
   if (error) throw error;
+
+  const linhas = (data ?? []) as IndisponibilidadeRow[];
+  if (linhas.length === 0) throw new Error(semPermissao("este período"));
+  return mapIndisponibilidade(linhas[0]!);
+}
+
+/** Aqui excluir de vez é o certo: nada no banco referencia indisponibilidade. */
+export async function removerIndisponibilidade(client: SupabaseClient, id: string): Promise<void> {
+  const { data, error } = await client.from("indisponibilidades").delete().eq("id", id).select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("este período"));
 }

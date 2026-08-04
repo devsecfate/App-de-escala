@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "../supabase.js";
+import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 /**
  * Cronograma do culto: as músicas da escala, em ordem. É o que liga o
@@ -96,13 +97,19 @@ export async function atualizarItemCronograma(
   if ("momento" in campos) atualizacao.momento = campos.momento ?? null;
   if ("observacao" in campos) atualizacao.observacao = campos.observacao ?? null;
 
-  const { error } = await client.from("cronograma_itens").update(atualizacao).eq("id", itemId);
+  const { data, error } = await client
+    .from("cronograma_itens")
+    .update(atualizacao)
+    .eq("id", itemId)
+    .select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("este item do cronograma"));
 }
 
 export async function removerItemCronograma(client: SupabaseClient, itemId: string): Promise<void> {
-  const { error } = await client.from("cronograma_itens").delete().eq("id", itemId);
+  const { data, error } = await client.from("cronograma_itens").delete().eq("id", itemId).select("id");
   if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("este item do cronograma"));
 }
 
 /**

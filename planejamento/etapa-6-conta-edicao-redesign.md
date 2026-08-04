@@ -1,5 +1,23 @@
 # Etapa 6 — Conta própria, poder corrigir, e um app que não é feio
 
+> **Status (2026-08-04): as três etapas estão implementadas.** Falta commitar e
+> publicar. Duas coisas saíram diferentes do que está escrito abaixo, ambas por
+> um motivo registrado no código:
+>
+> - **§1.2 fala em nove primitivos; existem treze.** Entraram `CampoSenha`,
+>   `MenuAcoes`, `Alternador` e `NumeroContando` — os três últimos porque a
+>   Etapa 2 precisava de um lugar para as ações de cada item, de um lugar para
+>   achar o que foi arquivado, e dos números do relatório.
+> - **A regra de arquivar-ou-excluir virou código puro no core**
+>   (`packages/core/src/exclusao.ts`, com testes) em vez de ficar espalhada nas
+>   telas: a mesma decisão aparece em ministério, evento, função e música.
+> - **Renomear coluna do repertório (§Etapa 3) não migra a chave do jsonb.** A
+>   chave ficou imutável e só o rótulo muda — migrar `musicas.extras` sem
+>   transação deixaria valores órfãos em caso de falha no meio, e o líder nunca
+>   vê a chave.
+>
+> O único item da "Verificação" ainda aberto é o **6 (celular físico)**.
+
 ## Contexto
 
 O app está em produção e funciona, mas três coisas o impedem de ser entregue para a igreja:

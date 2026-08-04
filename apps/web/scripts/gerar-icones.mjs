@@ -23,9 +23,10 @@ import { fileURLToPath } from "node:url";
 const RAIZ = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DESTINO = join(RAIZ, "public");
 
-const FUNDO = [15, 23, 42, 255]; // #0f172a, o mesmo theme_color do manifest
+const FUNDO = [15, 118, 110, 255]; // #0f766e, o mesmo theme_color do manifest
 const BRANCO = [255, 255, 255, 255];
-const VERDE = [34, 197, 94, 255]; // #22c55e
+const VERDE = [94, 234, 212, 255]; // #5eead4 — verde-água da marca; o #22c55e
+// antigo sumia contra o azul-petróleo do fundo novo.
 const TRANSPARENTE = [0, 0, 0, 0];
 
 // O desenho vive num quadrado de 64x64, como o viewBox do SVG.

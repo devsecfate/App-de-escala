@@ -24,6 +24,26 @@ export interface Perfil {
   ativo: boolean;
 }
 
+/**
+ * Código que o líder gera para alguém entrar na igreja/ministério.
+ * Não depende de e-mail: o líder manda o código por onde quiser.
+ */
+export interface Convite {
+  id: string;
+  igrejaId: string;
+  /** null = entra só na igreja, sem ministério definido. */
+  ministerioId: string | null;
+  codigo: string;
+  nomeSugerido: string | null;
+  papel: PapelMinisterio;
+  usosMax: number;
+  usos: number;
+  expiraEm: string; // ISO 8601
+  canceladoEm: string | null;
+  criadoPor: string | null;
+  criadoEm: string;
+}
+
 export interface Ministerio {
   id: string;
   igrejaId: string;
@@ -46,6 +66,8 @@ export interface Funcao {
   ministerioId: string;
   nome: string;
   obrigatoria: boolean;
+  /** false = arquivada: some das listas, mas o histórico de escalações continua. */
+  ativo: boolean;
 }
 
 export interface Evento {
@@ -55,6 +77,8 @@ export interface Evento {
   dataHora: string; // ISO 8601
   tipo: string;
   observacoes: string | null;
+  /** false = arquivado: some da agenda, mas as escalas já montadas continuam. */
+  ativo: boolean;
 }
 
 export interface Escala {

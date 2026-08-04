@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import { motion } from "motion/react";
+import { ArrowLeft, BarChart3, Lock } from "lucide-react";
 import {
   listarMembrosDoMinisterio,
   mesDe,
@@ -12,6 +14,19 @@ import {
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
+import {
+  Alerta,
+  Badge,
+  BotaoLink,
+  Campo,
+  Card,
+  EsqueletoLista,
+  EstadoVazio,
+  NumeroContando,
+  TituloPagina,
+} from "../components/ui";
+import { itemDaLista, listaEmCascata, useTransicao } from "../lib/movimento";
+import { mensagemDeErro } from "../lib/erros-auth";
 
 function formatarDia(iso: string | null, fusoHorario: string): string {
   if (!iso) return "—";
@@ -27,6 +42,13 @@ interface Periodo {
   inicio: string;
   fim: string;
 }
+
+const ATALHOS = [
+  ["mes", "Este mês"],
+  ["mesPassado", "Mês passado"],
+  ["tresMeses", "Últimos 3 meses"],
+  ["ano", "Este ano"],
+] as const;
 
 export function Relatorio() {
   const { id } = useParams<{ id: string }>();
@@ -63,9 +85,9 @@ export function Relatorio() {
             membros.some((membro) => membro.perfilId === perfil.id && membro.papel === "lider"),
         );
         setPeriodo(mesDe(new Date(), fuso));
-      } catch (error) {
+      } catch (problema) {
         if (!cancelado) {
-          setErro(error instanceof Error ? error.message : "Não foi possível abrir o relatório.");
+          setErro(mensagemDeErro(problema, "Não foi possível abrir o relatório."));
           setCarregando(false);
         }
       }
@@ -102,10 +124,8 @@ export function Relatorio() {
       .then((resultado) => {
         if (!cancelado) setRelatorio(resultado);
       })
-      .catch((error: unknown) => {
-        if (!cancelado) {
-          setErro(error instanceof Error ? error.message : "Não foi possível carregar o relatório.");
-        }
+      .catch((problema: unknown) => {
+        if (!cancelado) setErro(mensagemDeErro(problema, "Não foi possível carregar o relatório."));
       })
       .finally(() => {
         if (!cancelado) setCarregando(false);
@@ -121,7 +141,7 @@ export function Relatorio() {
     [relatorio],
   );
 
-  function aplicarAtalho(atalho: "mes" | "mesPassado" | "tresMeses" | "ano") {
+  function aplicarAtalho(atalho: (typeof ATALHOS)[number][0]) {
     if (!fusoHorario) return;
     const agora = new Date();
     const mesAtual = mesDe(agora, fusoHorario);
@@ -140,7 +160,7 @@ export function Relatorio() {
   if (!ministerio && carregando) {
     return (
       <Layout>
-        <p className="text-sm text-slate-500">Carregando...</p>
+        <EsqueletoLista linhas={4} />
       </Layout>
     );
   }
@@ -148,7 +168,15 @@ export function Relatorio() {
   if (!ministerio) {
     return (
       <Layout>
-        <p className="text-sm text-red-600">{erro ?? "Ministério não encontrado."}</p>
+        <EstadoVazio
+          titulo="Ministério não encontrado"
+          descricao={erro ?? "Ele pode ter sido excluído, ou você não faz parte dele."}
+          acao={
+            <BotaoLink to="/ministerios" icone={<ArrowLeft aria-hidden className="size-4" />}>
+              Voltar para os ministérios
+            </BotaoLink>
+          }
+        />
       </Layout>
     );
   }
@@ -156,161 +184,208 @@ export function Relatorio() {
   if (!souLider) {
     return (
       <Layout>
-        <h1 className="text-lg font-semibold text-slate-900">{ministerio.nome}</h1>
-        <p className="mt-4 text-sm text-slate-600">
-          O relatório de participação é do líder do ministério.
-        </p>
-        <Link to={`/ministerios/${ministerio.id}`} className="mt-4 inline-block text-sm text-slate-500 underline">
-          Voltar ao ministério
-        </Link>
+        <EstadoVazio
+          icone={<Lock aria-hidden className="size-6" />}
+          titulo="Relatório restrito"
+          descricao={`O relatório de participação é do líder de ${ministerio.nome}.`}
+          acao={
+            <BotaoLink
+              to={`/ministerios/${ministerio.id}`}
+              icone={<ArrowLeft aria-hidden className="size-4" />}
+            >
+              Voltar ao ministério
+            </BotaoLink>
+          }
+        />
       </Layout>
     );
   }
 
   return (
     <Layout>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h1 className="text-lg font-semibold text-slate-900">Participação · {ministerio.nome}</h1>
-          <p className="text-sm text-slate-500">Quantas vezes cada pessoa serviu no período.</p>
-        </div>
-        <Link
-          to={`/ministerios/${ministerio.id}`}
-          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
-        >
-          Voltar ao ministério
-        </Link>
-      </div>
+      <Link
+        to={`/ministerios/${ministerio.id}`}
+        className="mb-3 inline-flex items-center gap-1.5 text-sm font-medium text-texto-suave transition hover:text-texto"
+      >
+        <ArrowLeft aria-hidden className="size-4" />
+        {ministerio.nome}
+      </Link>
 
-      <section className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-sm text-slate-600">
-            De
-            <input
-              type="date"
-              value={periodo?.inicio ?? ""}
-              onChange={(evento) =>
-                setPeriodo((atual) => (atual ? { ...atual, inicio: evento.target.value } : atual))
-              }
-              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <label className="text-sm text-slate-600">
-            Até
-            <input
-              type="date"
-              value={periodo?.fim ?? ""}
-              onChange={(evento) =>
-                setPeriodo((atual) => (atual ? { ...atual, fim: evento.target.value } : atual))
-              }
-              className="mt-1 block rounded-lg border border-slate-300 px-3 py-2 text-sm"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {(
-              [
-                ["mes", "Este mês"],
-                ["mesPassado", "Mês passado"],
-                ["tresMeses", "Últimos 3 meses"],
-                ["ano", "Este ano"],
-              ] as const
-            ).map(([atalho, texto]) => (
-              <button
-                key={atalho}
-                type="button"
-                onClick={() => aplicarAtalho(atalho)}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-slate-700 hover:bg-slate-50"
+      <TituloPagina descricao="Quantas vezes cada pessoa serviu no período — e quem ainda não serviu nenhuma.">
+        Participação
+      </TituloPagina>
+
+      <Card className="mt-5">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Campo
+            rotulo="De"
+            type="date"
+            value={periodo?.inicio ?? ""}
+            onChange={(evento) =>
+              setPeriodo((atual) => (atual ? { ...atual, inicio: evento.target.value } : atual))
+            }
+          />
+          <Campo
+            rotulo="Até"
+            type="date"
+            value={periodo?.fim ?? ""}
+            onChange={(evento) =>
+              setPeriodo((atual) => (atual ? { ...atual, fim: evento.target.value } : atual))
+            }
+          />
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          {ATALHOS.map(([atalho, texto]) => (
+            <button
+              key={atalho}
+              type="button"
+              onClick={() => aplicarAtalho(atalho)}
+              className="min-h-9 rounded-lg border border-borda bg-superficie-suave px-3 text-sm font-medium text-texto-suave transition duration-(--duracao-rapida) hover:border-borda-forte hover:text-texto"
+            >
+              {texto}
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {erro && (
+        <Alerta className="mt-4" tipo="erro">
+          {erro}
+        </Alerta>
+      )}
+
+      {carregando ? (
+        <div className="mt-5">
+          <EsqueletoLista linhas={4} />
+        </div>
+      ) : (
+        relatorio && (
+          <>
+            <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Indicador rotulo="Escalações" valor={relatorio.totalEscalacoes} />
+              <Indicador rotulo="Pessoas que serviram" valor={relatorio.pessoasQueServiram} />
+              <Indicador
+                rotulo="Sem servir no período"
+                valor={relatorio.pessoasSemServir}
+                alerta={relatorio.pessoasSemServir > 0}
+              />
+              <Indicador rotulo="Média por pessoa" valor={relatorio.mediaPorPessoa} decimais={1} />
+            </div>
+
+            {relatorio.linhas.length === 0 ? (
+              <EstadoVazio
+                className="mt-5"
+                icone={<BarChart3 aria-hidden className="size-6" />}
+                titulo="Ninguém neste ministério ainda"
+                descricao="Adicione as pessoas na tela do ministério para o relatório fazer sentido."
+                acao={
+                  <BotaoLink variante="primario" to={`/ministerios/${ministerio.id}`}>
+                    Abrir {ministerio.nome}
+                  </BotaoLink>
+                }
+              />
+            ) : (
+              <motion.ul
+                variants={listaEmCascata}
+                initial="oculto"
+                animate="visivel"
+                className="mt-5 divide-y divide-borda overflow-hidden rounded-cartao border border-borda bg-superficie shadow-cartao"
               >
-                {texto}
-              </button>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {erro && <p className="mt-4 text-sm text-red-600">{erro}</p>}
-
-      {carregando && <p className="mt-4 text-sm text-slate-500">Carregando...</p>}
-
-      {relatorio && !carregando && (
-        <>
-          <section className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              ["Escalações", relatorio.totalEscalacoes],
-              ["Pessoas que serviram", relatorio.pessoasQueServiram],
-              ["Sem servir no período", relatorio.pessoasSemServir],
-              ["Média por pessoa", relatorio.mediaPorPessoa],
-            ].map(([rotulo, valor]) => (
-              <div key={rotulo} className="rounded-xl border border-slate-200 bg-white p-4">
-                <p className="text-2xl font-semibold text-slate-900">{valor}</p>
-                <p className="text-xs text-slate-500">{rotulo}</p>
-              </div>
-            ))}
-          </section>
-
-          {relatorio.linhas.length === 0 ? (
-            <p className="mt-6 text-center text-slate-500">
-              Ninguém neste ministério ainda. Cadastre as pessoas para o relatório fazer sentido.
-            </p>
-          ) : (
-            <ul className="mt-4 divide-y divide-slate-200 rounded-xl border border-slate-200 bg-white">
-              {relatorio.linhas.map((linha) => (
-                <li key={linha.perfilId} className="px-4 py-3">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate font-medium text-slate-900">
-                        {linha.nome}
-                        {!linha.aindaNoMinisterio && (
-                          <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
-                            saiu do ministério
-                          </span>
-                        )}
-                      </p>
-                      <p className="mt-0.5 text-sm text-slate-500">
-                        {linha.vezes === 0
-                          ? "Não serviu no período"
-                          : `Última vez em ${formatarDia(linha.ultimaVez, fusoHorario ?? "UTC")}` +
-                            (linha.funcoes.length > 0 ? ` · ${linha.funcoes.join(", ")}` : "")}
-                      </p>
-                      {linha.vezes > 0 && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          {linha.confirmadas} confirmadas · {linha.recusadas} recusadas ·{" "}
-                          {linha.pendentes} pendentes
+                {relatorio.linhas.map((linha) => (
+                  <motion.li key={linha.perfilId} variants={itemDaLista} className="px-4 py-3.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate font-medium text-texto">{linha.nome}</span>
+                          {!linha.aindaNoMinisterio && <Badge tom="neutro">Saiu do ministério</Badge>}
+                        </div>
+                        <p className="mt-0.5 text-sm text-texto-suave">
+                          {linha.vezes === 0
+                            ? "Não serviu no período"
+                            : `Última vez em ${formatarDia(linha.ultimaVez, fusoHorario ?? "UTC")}` +
+                              (linha.funcoes.length > 0 ? ` · ${linha.funcoes.join(", ")}` : "")}
                         </p>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {/* Barra proporcional: o desequilíbrio salta aos olhos sem precisar
-                          comparar número por número. */}
-                      <div className="hidden h-2 w-24 overflow-hidden rounded-full bg-slate-100 sm:block">
-                        <div
-                          className="h-full rounded-full bg-slate-900"
-                          style={{
-                            width: maiorNumeroDeVezes
-                              ? `${(linha.vezes / maiorNumeroDeVezes) * 100}%`
-                              : "0%",
-                          }}
-                        />
+                        {linha.vezes > 0 && (
+                          <p className="mt-1 text-sm text-texto-suave">
+                            {linha.confirmadas} confirmadas · {linha.recusadas} recusadas ·{" "}
+                            {linha.pendentes} pendentes
+                          </p>
+                        )}
                       </div>
-                      <span
-                        className={`w-10 text-right text-lg font-semibold ${
-                          linha.vezes === 0 ? "text-slate-300" : "text-slate-900"
-                        }`}
-                      >
-                        {linha.vezes}
-                      </span>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
 
-          <p className="mt-3 text-xs text-slate-500">
-            Conta só escala publicada — rascunho ainda é intenção, não trabalho feito.
-          </p>
-        </>
+                      <div className="flex shrink-0 items-center gap-3">
+                        <BarraDeParticipacao vezes={linha.vezes} maximo={maiorNumeroDeVezes} />
+                        <span
+                          className={
+                            linha.vezes === 0
+                              ? "w-8 text-right text-lg font-bold text-borda-forte"
+                              : "w-8 text-right text-lg font-bold tabular-nums text-texto"
+                          }
+                        >
+                          {linha.vezes}
+                        </span>
+                      </div>
+                    </div>
+                  </motion.li>
+                ))}
+              </motion.ul>
+            )}
+
+            <p className="mt-3 text-sm text-texto-suave">
+              Conta só escala publicada — rascunho ainda é intenção, não trabalho feito.
+            </p>
+          </>
+        )
       )}
     </Layout>
+  );
+}
+
+function Indicador({
+  rotulo,
+  valor,
+  decimais = 0,
+  alerta = false,
+}: {
+  rotulo: string;
+  valor: number;
+  decimais?: number;
+  alerta?: boolean;
+}) {
+  return (
+    <Card className={alerta ? "border-atencao/40 bg-atencao-suave" : undefined}>
+      <p
+        className={
+          alerta
+            ? "text-3xl font-bold tabular-nums text-atencao-forte"
+            : "text-3xl font-bold tabular-nums text-texto"
+        }
+      >
+        <NumeroContando valor={valor} decimais={decimais} />
+        {/* O leitor de tela lê o valor final direto; a contagem é só visual. */}
+        <span className="sr-only">{valor.toLocaleString("pt-BR")}</span>
+      </p>
+      <p className={alerta ? "mt-1 text-sm text-atencao-forte" : "mt-1 text-sm text-texto-suave"}>
+        {rotulo}
+      </p>
+    </Card>
+  );
+}
+
+/** Barra proporcional: o desequilíbrio salta aos olhos sem comparar número por número. */
+function BarraDeParticipacao({ vezes, maximo }: { vezes: number; maximo: number }) {
+  const transicao = useTransicao({ duration: 0.7, ease: [0.22, 1, 0.36, 1] });
+  const proporcao = maximo > 0 ? vezes / maximo : 0;
+
+  return (
+    <div aria-hidden className="hidden h-2 w-24 overflow-hidden rounded-full bg-superficie-suave sm:block">
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: `${proporcao * 100}%` }}
+        transition={transicao}
+        className="h-full rounded-full bg-linear-to-r from-marca-600 to-marca-800"
+      />
+    </div>
   );
 }
