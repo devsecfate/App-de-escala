@@ -87,6 +87,44 @@ export async function atualizarPerfil(
   return mapPerfil(linhas[0]!);
 }
 
+/** O que aconteceu com a conta ao ser excluída. */
+export type ResultadoExclusaoConta = "excluida" | "arquivada";
+
+/**
+ * Quantas escalações e escalas dependem de mim.
+ *
+ * A tela de conta pergunta isto ANTES de confirmar, para dizer qual dos dois
+ * desfechos vai acontecer — a mesma honestidade que `decidirExclusao` exige em
+ * ministério, evento e função.
+ */
+export async function contarMeuHistorico(client: SupabaseClient): Promise<number> {
+  const { data, error } = await client.rpc("contar_meu_historico");
+  if (error) throw error;
+  return (data as number | null) ?? 0;
+}
+
+/**
+ * Exclui a própria conta. Em qualquer um dos dois casos a pessoa deixa de
+ * conseguir entrar — o login é destruído no banco.
+ *
+ * - `"excluida"`: nunca serviu, então perfil, vínculos e login somem de vez (e
+ *   a igreja também, se ela era a última pessoa lá dentro).
+ * - `"arquivada"`: já serviu. O nome continua nas escalas passadas, porque é
+ *   dele que o relatório de participação precisa; o resto (telefone, e-mail,
+ *   vínculos, avisos no celular) é apagado.
+ *
+ * Recusa, com mensagem em português, quem é o único administrador da igreja ou
+ * o único líder de um ministério que ainda tem outras pessoas.
+ *
+ * Depois de chamar, faça `signOut()`: a sessão do navegador continua em pé com
+ * um token que já não corresponde a ninguém.
+ */
+export async function excluirMinhaConta(client: SupabaseClient): Promise<ResultadoExclusaoConta> {
+  const { data, error } = await client.rpc("excluir_minha_conta");
+  if (error) throw error;
+  return data as ResultadoExclusaoConta;
+}
+
 /**
  * Desativa (ou reativa) alguém na igreja. Só admin: o trigger recusa quando
  * quem manda não é admin, então esta função existe para a tela do admin.

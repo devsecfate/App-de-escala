@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Church, LogOut, ShieldCheck, User } from "lucide-react";
+import { Church, LogOut, ShieldCheck, Trash2, TriangleAlert, User } from "lucide-react";
 import {
   atualizarIgreja,
   atualizarPerfil,
+  contarMeuHistorico,
+  excluirMinhaConta,
   obterIgreja,
   type Igreja,
 } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
 import { Layout } from "../components/Layout";
-import { Alerta, Badge, Botao, Campo, CampoSelect, Card, Esqueleto, Secao, TituloPagina } from "../components/ui";
+import {
+  Alerta,
+  Badge,
+  Botao,
+  Campo,
+  CampoSelect,
+  Card,
+  Esqueleto,
+  Modal,
+  Secao,
+  TituloPagina,
+} from "../components/ui";
 import { FUSOS } from "../lib/fusos";
 import { mensagemDeErro } from "../lib/erros-auth";
 
@@ -101,8 +114,133 @@ export function Conta() {
             </p>
           </Card>
         </Secao>
+
+        <ZonaDePerigo />
       </div>
     </Layout>
+  );
+}
+
+/**
+ * Excluir a conta.
+ *
+ * Fica no fim da página, separada por borda vermelha e com o desfecho escrito
+ * antes de perguntar — a mesma honestidade das outras exclusões do app. Quem
+ * nunca serviu some de vez; quem já serviu perde o login e o nome fica nas
+ * escalas passadas, porque é dele que o relatório precisa.
+ *
+ * Pede para digitar EXCLUIR porque, ao contrário de arquivar um ministério,
+ * isto não tem desfazer nenhum.
+ */
+function ZonaDePerigo() {
+  const { sair } = useAuth();
+  const [historico, setHistorico] = useState<number | null>(null);
+  const [aberto, setAberto] = useState(false);
+  const [confirmacao, setConfirmacao] = useState("");
+  const [excluindo, setExcluindo] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    void contarMeuHistorico(supabase)
+      .then((total) => {
+        if (!cancelado) setHistorico(total);
+      })
+      .catch(() => {
+        // Não vale bloquear a tela por causa disto: sem o número, a confirmação
+        // usa a redação genérica, que continua verdadeira nos dois casos.
+        if (!cancelado) setHistorico(null);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, []);
+
+  const podeConfirmar = confirmacao.trim().toUpperCase() === "EXCLUIR";
+
+  async function excluir(evento: FormEvent) {
+    evento.preventDefault();
+    if (!podeConfirmar) return;
+    setExcluindo(true);
+    setErro(null);
+    try {
+      await excluirMinhaConta(supabase);
+      // A sessão do navegador continua em pé com um token que já não
+      // corresponde a ninguém; `sair` também limpa o cache offline.
+      await sair();
+    } catch (problema) {
+      setErro(mensagemDeErro(problema, "Não foi possível excluir a conta."));
+      setExcluindo(false);
+    }
+  }
+
+  const oQueVaiAcontecer =
+    historico === null
+      ? "Se você nunca serviu em nenhuma escala, seus dados somem por completo. Se já serviu, seu nome continua nas escalas passadas (o relatório da igreja depende disso) e todo o resto é apagado."
+      : historico === 0
+        ? "Você nunca serviu em nenhuma escala, então seus dados somem por completo — não fica rastro."
+        : `Você já aparece em ${historico} ${historico === 1 ? "escala" : "escalas"}. Seu nome continua nelas, porque é dele que o relatório da igreja precisa para dizer quem serviu. Todo o resto — telefone, e-mail, ministérios e avisos no celular — é apagado.`;
+
+  return (
+    <Secao titulo="Excluir minha conta">
+      <Card className="border-perigo/40 bg-perigo-suave/40">
+        <div className="flex items-start gap-3">
+          <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-perigo" />
+          <div className="min-w-0">
+            <p className="font-semibold text-texto">Isto não tem volta</p>
+            <p className="mt-1 text-sm text-texto-suave">{oQueVaiAcontecer}</p>
+            <p className="mt-2 text-sm text-texto-suave">
+              Em qualquer um dos casos você deixa de conseguir entrar no app.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex justify-end">
+          <Botao
+            variante="perigo"
+            icone={<Trash2 aria-hidden className="size-4" />}
+            onClick={() => {
+              setConfirmacao("");
+              setErro(null);
+              setAberto(true);
+            }}
+          >
+            Excluir minha conta
+          </Botao>
+        </div>
+      </Card>
+
+      <Modal
+        aberto={aberto}
+        aoFechar={() => {
+          if (!excluindo) setAberto(false);
+        }}
+        titulo="Excluir sua conta?"
+        descricao={oQueVaiAcontecer}
+      >
+        <form onSubmit={excluir} className="space-y-4">
+          {erro && <Alerta tipo="erro">{erro}</Alerta>}
+
+          <Campo
+            rotulo="Para confirmar, digite EXCLUIR"
+            value={confirmacao}
+            onChange={(evento) => setConfirmacao(evento.target.value)}
+            placeholder="EXCLUIR"
+            autoComplete="off"
+            autoFocus
+          />
+
+          <div className="flex flex-col-reverse gap-2 pt-1 sm:flex-row sm:justify-end">
+            <Botao variante="secundario" onClick={() => setAberto(false)} disabled={excluindo}>
+              Cancelar
+            </Botao>
+            <Botao type="submit" variante="perigo" carregando={excluindo} disabled={!podeConfirmar}>
+              Excluir para sempre
+            </Botao>
+          </div>
+        </form>
+      </Modal>
+    </Secao>
   );
 }
 
