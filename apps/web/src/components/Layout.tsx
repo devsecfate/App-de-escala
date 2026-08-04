@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { motion } from "motion/react";
-import { CalendarDays, CalendarOff, House, LogOut, Users } from "lucide-react";
+import { CalendarDays, CalendarOff, House, LogOut, UserCog, Users } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import { AvisoOffline } from "./AvisoOffline";
 import { cx } from "../lib/cx";
@@ -29,6 +29,9 @@ const ABAS = [
   { para: "/disponibilidade", rotulo: "Ausências", Icone: CalendarOff, exato: false },
 ];
 
+/** A aba de "Pessoas" é da igreja inteira, então só quem administra a vê. */
+const ABA_PESSOAS = { para: "/pessoas", rotulo: "Pessoas", Icone: UserCog, exato: false };
+
 /** "Ana Paula" → "AP"; e-mail sem nome → a primeira letra. */
 function iniciais(texto: string): string {
   const partes = texto.trim().split(/\s+/).filter(Boolean);
@@ -39,6 +42,7 @@ function iniciais(texto: string): string {
 
 export function Layout({ children }: { children: ReactNode }) {
   const { session, perfil, sair } = useAuth();
+  const abas = perfil?.papelGlobal === "admin" ? [...ABAS, ABA_PESSOAS] : ABAS;
   const semMovimento = usaMovimentoReduzido();
   const transicaoIndicador = semMovimento
     ? { duration: 0 }
@@ -59,7 +63,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
             {/* Navegação de desktop. No celular quem manda é a barra de baixo. */}
             <nav aria-label="Seções" className="hidden items-center gap-1 sm:flex">
-              {ABAS.map(({ para, rotulo, exato }) => (
+              {abas.map(({ para, rotulo, exato }) => (
                 <NavLink
                   key={para}
                   to={para}
@@ -134,7 +138,7 @@ export function Layout({ children }: { children: ReactNode }) {
         className="fixed inset-x-0 bottom-0 z-30 border-t border-borda/70 bg-superficie/90 pb-[var(--area-segura-inferior)] backdrop-blur-xl sm:hidden"
       >
         <ul className="mx-auto flex max-w-lg items-stretch">
-          {ABAS.map(({ para, rotulo, Icone, exato }) => (
+          {abas.map(({ para, rotulo, Icone, exato }) => (
             <li key={para} className="flex-1">
               <NavLink
                 to={para}

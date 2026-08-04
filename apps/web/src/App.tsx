@@ -41,6 +41,9 @@ const Disponibilidade = lazy(() =>
   import("./pages/Disponibilidade").then((modulo) => ({ default: modulo.Disponibilidade })),
 );
 const Conta = lazy(() => import("./pages/Conta").then((modulo) => ({ default: modulo.Conta })));
+const Pessoas = lazy(() =>
+  import("./pages/Pessoas").then((modulo) => ({ default: modulo.Pessoas })),
+);
 const MinisterioDetalhe = lazy(() =>
   import("./pages/MinisterioDetalhe").then((modulo) => ({ default: modulo.MinisterioDetalhe })),
 );
@@ -124,6 +127,14 @@ export default function App() {
           element={
             <RequerPerfil>
               <Relatorio />
+            </RequerPerfil>
+          }
+        />
+        <Route
+          path="/pessoas"
+          element={
+            <RequerPerfil>
+              <Pessoas />
             </RequerPerfil>
           }
         />

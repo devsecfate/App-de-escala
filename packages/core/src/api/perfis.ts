@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "../supabase.js";
-import type { Perfil } from "../types.js";
+import type { PapelGlobal, PapelMinisterio, Perfil } from "../types.js";
 import { exigirLinhaAfetada, semPermissao } from "./linhas.js";
 
 interface PerfilRow {
@@ -85,6 +85,60 @@ export async function atualizarPerfil(
   const linhas = (data ?? []) as PerfilRow[];
   if (linhas.length === 0) throw new Error(semPermissao("este perfil"));
   return mapPerfil(linhas[0]!);
+}
+
+/** Um vínculo de ministério, como a tela de pessoas da igreja precisa ver. */
+export interface VinculoDeMinisterio {
+  /** id da linha em `membros_ministerio` — é o que `definirPapelDoMembro` recebe */
+  vinculoId: string;
+  ministerioId: string;
+  ministerioNome: string;
+  papel: PapelMinisterio;
+}
+
+export interface PessoaDaIgreja extends Perfil {
+  ministerios: VinculoDeMinisterio[];
+}
+
+/**
+ * Todo mundo da igreja, com os ministérios de cada um.
+ *
+ * Até aqui só existia `listarPerfisDaIgreja`, sem os vínculos, e nenhuma tela
+ * mostrava a igreja inteira — quem entrou por convite e ainda não foi para
+ * ministério nenhum era invisível para quem administra.
+ */
+export async function listarPessoasDaIgreja(client: SupabaseClient): Promise<PessoaDaIgreja[]> {
+  const { data, error } = await client.rpc("pessoas_da_igreja");
+  if (error) throw error;
+
+  return ((data ?? []) as (PerfilRow & { ministerios: VinculoDeMinisterio[] | null })[]).map(
+    (row) => ({ ...mapPerfil(row), ministerios: row.ministerios ?? [] }),
+  );
+}
+
+/**
+ * Promove alguém a administrador da igreja, ou devolve ao papel de membro.
+ *
+ * Administrador é o papel de igreja, não de ministério: ele cria e arquiva
+ * ministérios, enxerga todos eles e pode promover outras pessoas. Quem lidera
+ * um ministério continua sendo `membros_ministerio.papel` — ver
+ * `definirPapelDoMembro`.
+ *
+ * O banco recusa rebaixar (ou desativar) o último administrador ativo: uma
+ * igreja sem nenhum vira um beco sem saída, porque não sobra quem conserte.
+ */
+export async function definirPapelGlobal(
+  client: SupabaseClient,
+  perfilId: string,
+  papelGlobal: PapelGlobal,
+): Promise<void> {
+  const { data, error } = await client
+    .from("perfis")
+    .update({ papel_global: papelGlobal })
+    .eq("id", perfilId)
+    .select("id");
+  if (error) throw error;
+  exigirLinhaAfetada(data as { id: string }[] | null, semPermissao("o papel desta pessoa"));
 }
 
 /** O que aconteceu com a conta ao ser excluída. */

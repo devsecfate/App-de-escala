@@ -28,6 +28,17 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+/**
+ * O GoTrue devolve "User from sub claim in JWT does not exist" quando a sessão
+ * guardada no aparelho aponta para uma conta que já não existe — conta excluída
+ * noutro aparelho, ou banco recriado em desenvolvimento.
+ */
+function usuarioSumiu(erro: unknown): boolean {
+  if (!erro || typeof erro !== "object" || !("message" in erro)) return false;
+  const mensagem = (erro as { message?: unknown }).message;
+  return typeof mensagem === "string" && /sub claim in jwt does not exist/i.test(mensagem);
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [perfil, setPerfil] = useState<Perfil | null>(null);
@@ -56,6 +67,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (erro) {
       // Resolver mesmo em erro; senão a tela fica num "Carregando..." eterno.
       setPerfil(null);
+
+      // O token aponta para um usuário que não existe mais. Ficou alcançável
+      // quando o app ganhou "excluir minha conta": quem exclui num aparelho
+      // deixa o outro com uma sessão órfã. Sem este tratamento o outro aparelho
+      // cai no onboarding pedindo código de convite, como se a pessoa fosse
+      // nova na igreja — em vez de dizer que a sessão acabou.
+      if (usuarioSumiu(erro)) {
+        await supabase.auth.signOut();
+        return null;
+      }
+
       console.error("Falha ao carregar o perfil:", erro);
       return null;
     } finally {
