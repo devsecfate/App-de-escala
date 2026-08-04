@@ -6,7 +6,8 @@ Memória de trabalho do projeto App de Escala. Leia este arquivo primeiro para p
 
 - Fases 0 a 5 implementadas **e no ar**. Repositório: https://github.com/devsecfate/App-de-escala (branch `main`). Detalhes em `memoria/memoria.md`.
 - **Etapa 6 inteira implementada e no ar** (commit `c8e8d12` na `main`; as 7 primeiras migrations estão aplicadas no Supabase `escala-app-sp` e a Vercel publicou). O `planejamento/etapa-6-conta-edicao-redesign.md` está cumprido de ponta a ponta.
-- ⚠️ **Excluir a própria conta está implementado mas NÃO commitado e NÃO em produção.** É a 8ª migration (`20260804180000_excluir_conta.sql`), pedida depois do plano. Publicar exige `npx supabase db push` **antes** do deploy — sem a RPC no banco, a tela `/conta` quebra ao carregar (`contar_meu_historico` não existiria).
+- **Excluir a própria conta também está no ar** (commit `250c760`; 8ª migration `20260804180000_excluir_conta.sql` aplicada no `escala-app-sp`). Foi pedida depois do plano da Etapa 6.
+- **Migration antes do deploy, sempre.** As duas publicações desta sessão dependeram disso: o código novo chama RPC e coluna que só existem depois do `npx supabase db push`. Publicar na ordem inversa deixa a Vercel servindo um app que quebra ao carregar. `db push` primeiro, `git push` depois.
 - **`mailer_autoconfirm` está `true` em produção** (ligado em 2026-08-04 pela Management API). É o passo da §1.4 do `DEPLOY.md`, e sem ele o `signUp` não devolve sessão: manda um e-mail de confirmação que o SMTP embutido só entrega para o dono do projeto, e ninguém da igreja passa da tela de criar conta. Conferir com:
   `curl -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" https://api.supabase.com/v1/projects/ehwvgsyrtymdypubnhjr/config/auth`
   Ligar de novo, se algum dia voltar: `curl -X PATCH ... -d '{"mailer_autoconfirm": true}'` no mesmo endereço.
