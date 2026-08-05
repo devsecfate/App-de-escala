@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Botao, Card } from "./ui";
 
 /**
  * Convite para instalar o app na tela inicial (Fase 5).
@@ -85,35 +86,27 @@ export function InstalarApp() {
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium text-slate-900">Instalar na tela inicial</p>
-          <p className="text-sm text-slate-500">
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-texto">Instalar na tela inicial</p>
+          <p className="mt-0.5 text-sm text-texto-suave">
             {evento
               ? "Abre como app, em tela cheia, e a escala fica disponível mesmo sem internet."
               : "No iPhone: toque em Compartilhar e depois em “Adicionar à Tela de Início”."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           {evento && (
-            <button
-              type="button"
-              onClick={() => void instalar()}
-              className="rounded-lg bg-slate-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-slate-800"
-            >
+            <Botao tamanho="pequeno" onClick={() => void instalar()}>
               Instalar
-            </button>
+            </Botao>
           )}
-          <button
-            type="button"
-            onClick={dispensar}
-            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
+          <Botao tamanho="pequeno" variante="secundario" onClick={dispensar}>
             Agora não
-          </button>
+          </Botao>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }

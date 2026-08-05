@@ -54,7 +54,7 @@ export function Alternador<T extends string>({
             onClick={() => aoMudar(opcao.valor)}
             className={cx(
               "relative min-h-9 rounded-lg px-3 text-sm font-semibold transition duration-(--duracao-rapida)",
-              selecionada ? "text-marca-800" : "text-texto-suave hover:text-texto",
+              selecionada ? "text-marca-contraste" : "text-texto-suave hover:text-texto",
             )}
           >
             {selecionada && (
@@ -70,7 +70,7 @@ export function Alternador<T extends string>({
                 <span
                   className={cx(
                     "rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums",
-                    selecionada ? "bg-marca-50 text-marca-800" : "bg-borda text-texto-suave",
+                    selecionada ? "bg-marca-suave text-marca-contraste" : "bg-borda text-texto-suave",
                   )}
                 >
                   {opcao.contagem}

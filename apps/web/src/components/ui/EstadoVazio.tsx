@@ -32,7 +32,7 @@ export function EstadoVazio({
       )}
     >
       {icone && (
-        <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-marca-50 text-marca-700">
+        <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-marca-suave text-marca-contraste">
           {icone}
         </div>
       )}

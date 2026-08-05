@@ -45,8 +45,8 @@
   --color-marca-900: #134e4a;
   --color-marca-950: #042f2e;
 
-  /* Superfícies e texto. Nomes semânticos para o tema escuro entrar depois
-     trocando só estes valores — as telas não precisam saber a cor. */
+  /* Superfícies e texto. Nomes semânticos porque o tema escuro troca só estes
+     valores — nenhuma tela precisa saber a cor, nem ganhar variante `dark:`. */
   --color-fundo: #f8fafc;
   --color-superficie: #ffffff;
   --color-superficie-suave: #f1f5f9;
@@ -55,6 +55,15 @@
   --color-texto: #0f172a;
   --color-texto-suave: #64748b;
 
+  /* Tinta da marca usada como SUPERFÍCIE (cápsula da aba ativa, avatar, caixa
+     do código de convite) e a cor que fica legível em cima dela. Existe porque
+     `marca-50` é um degrau fixo da escala: no escuro ele continuaria quase
+     branco, e uma escala de cor não deve virar de cabeça para baixo. */
+  --color-marca-suave: #f0fdfa;
+  --color-marca-contraste: #115e59;
+
+  /* `-suave` é fundo, `-forte` é o texto/ênfase legível sobre ele. No claro o
+     forte é mais escuro que a base; no escuro, mais claro. */
   --color-sucesso: #16a34a;
   --color-sucesso-suave: #f0fdf4;
   --color-sucesso-forte: #15803d;
@@ -64,6 +73,10 @@
   --color-perigo: #dc2626;
   --color-perigo-suave: #fef2f2;
   --color-perigo-forte: #b91c1c;
+
+  /* Véu atrás do modal. No claro é a tinta escura por cima; no escuro precisa
+     ser mais denso, senão o painel não se separa do fundo. */
+  --color-veu: oklch(0.21 0.04 265 / 0.5);
 
   --radius-cartao: 0.875rem;
 
@@ -106,6 +119,61 @@
   }
 }
 
+/* ---------------------------------------------------------------------------
+ * Tema escuro
+ *
+ * Um bloco só, e nenhuma classe `dark:` espalhada pelas telas — é o que a
+ * camada de tokens da Etapa 6 comprou. Toda tela que usa `bg-superficie`,
+ * `text-texto` e `border-borda` vira sozinha.
+ *
+ * O atributo é sempre concreto (`claro` ou `escuro`): quem escolhe "seguir o
+ * sistema" tem a preferência guardada em `localStorage`, mas quem escreve no
+ * `<html>` é o JS de `lib/tema.ts`, que resolve a media query e reage quando
+ * ela muda. Assim o CSS não precisa do bloco duplicado dentro de um
+ * `@media (prefers-color-scheme: dark)`.
+ *
+ * `color-scheme` não é enfeite: sem ele o seletor de data e o `<select>`
+ * nativos continuam brancos, e a barra de rolagem também — no meio de um app
+ * escuro, é o detalhe que denuncia que o tema é pintura por cima.
+ * ------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+}
+
+[data-tema="escuro"] {
+  color-scheme: dark;
+
+  --color-fundo: #0b1220;
+  --color-superficie: #131c2b;
+  --color-superficie-suave: #1c2739;
+  --color-borda: #273347;
+  --color-borda-forte: #3a4a63;
+  --color-texto: #e8edf5;
+  --color-texto-suave: #9aa8bd;
+
+  --color-marca-suave: #0d3733;
+  --color-marca-contraste: #5eead4;
+
+  --color-sucesso: #22c55e;
+  --color-sucesso-suave: #0e2a1b;
+  --color-sucesso-forte: #4ade80;
+  --color-atencao: #eab308;
+  --color-atencao-suave: #2d2410;
+  --color-atencao-forte: #fbbf24;
+  --color-perigo: #ef4444;
+  --color-perigo-suave: #331519;
+  --color-perigo-forte: #f87171;
+
+  /* Sombra quase não aparece sobre fundo escuro; o que separa as camadas é a
+     sombra ficar mais preta e mais espalhada. */
+  --shadow-cartao: 0 1px 2px 0 rgb(0 0 0 / 0.3), 0 1px 3px 0 rgb(0 0 0 / 0.35);
+  --shadow-flutuante: 0 10px 30px -12px rgb(0 0 0 / 0.7);
+  --shadow-modal: 0 25px 50px -12px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 8px 24px -8px rgb(45 212 191 / 0.35);
+
+  --color-veu: oklch(0.14 0.02 265 / 0.7);
+}
+
 :root {
   /* Recortes do iPhone. A barra inferior de navegação soma isto ao próprio
      padding para não ficar embaixo do home indicator. */
@@ -140,8 +208,18 @@
   }
 
   ::selection {
-    background-color: var(--color-marca-100);
-    color: var(--color-marca-900);
+    background-color: var(--color-marca-suave);
+    color: var(--color-marca-contraste);
+  }
+
+  /* A troca de tema não pode ser um corte seco: o fundo e o texto passam de um
+     para o outro. Fica de fora quem pediu menos movimento (o bloco no fim do
+     arquivo zera as transições). */
+  html,
+  body {
+    transition:
+      background-color var(--duracao-media) var(--ease-saida),
+      color var(--duracao-media) var(--ease-saida);
   }
 }
 

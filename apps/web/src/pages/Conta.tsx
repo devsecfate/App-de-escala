@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Church, LogOut, ShieldCheck, Trash2, TriangleAlert, User } from "lucide-react";
+import { Church, LogOut, Moon, ShieldCheck, Sun, Trash2, TriangleAlert, User } from "lucide-react";
 import {
   atualizarIgreja,
   atualizarPerfil,
@@ -10,9 +10,11 @@ import {
 } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
+import { useTema } from "../context/TemaContext";
 import { Layout } from "../components/Layout";
 import {
   Alerta,
+  Alternador,
   Badge,
   Botao,
   Campo,
@@ -71,6 +73,8 @@ export function Conta() {
           {perfil && <FormularioPerfil perfil={perfil} aoSalvar={recarregarPerfil} />}
         </Secao>
 
+        <Aparencia />
+
         {souAdmin && (
           <Secao
             titulo="A igreja"
@@ -118,6 +122,44 @@ export function Conta() {
         <ZonaDePerigo />
       </div>
     </Layout>
+  );
+}
+
+/**
+ * Claro, escuro, ou o que o aparelho estiver usando.
+ *
+ * Fica no aparelho, não na conta: é preferência de quem está olhando a tela,
+ * não de quem é a pessoa. Quem entra do celular à noite e do computador de dia
+ * quer cada um do seu jeito, e sincronizar isso pelo perfil atrapalharia.
+ */
+function Aparencia() {
+  const { preferencia, tema, definirPreferencia } = useTema();
+
+  return (
+    <Secao titulo="Aparência" descricao="Vale só neste aparelho.">
+      <Card>
+        <Alternador
+          rotulo="Tema do app"
+          valor={preferencia}
+          aoMudar={definirPreferencia}
+          opcoes={[
+            { valor: "sistema", rotulo: "Sistema" },
+            { valor: "claro", rotulo: "Claro" },
+            { valor: "escuro", rotulo: "Escuro" },
+          ]}
+        />
+        <p className="mt-3 flex items-center gap-1.5 text-sm text-texto-suave">
+          {tema === "escuro" ? (
+            <Moon aria-hidden className="size-4" />
+          ) : (
+            <Sun aria-hidden className="size-4" />
+          )}
+          {preferencia === "sistema"
+            ? `Seguindo o aparelho, que agora está no ${tema}.`
+            : `Fixado no ${preferencia}.`}
+        </p>
+      </Card>
+    </Secao>
   );
 }
 

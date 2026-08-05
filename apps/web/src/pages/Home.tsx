@@ -179,7 +179,7 @@ function ProximaEscala({
           {escalacao.confirmacao === "pendente" ? (
             <div className="mt-5 flex flex-col gap-2 sm:flex-row">
               <Botao
-                className="bg-white text-marca-800 hover:bg-marca-50 sm:flex-1"
+                className="bg-white text-marca-900 hover:bg-marca-50 sm:flex-1"
                 icone={<Check aria-hidden className="size-4" />}
                 carregando={respondendo}
                 onClick={() => aoResponder(escalacao.escalacaoId, "confirmado")}

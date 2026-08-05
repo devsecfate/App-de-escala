@@ -72,7 +72,7 @@ export function Layout({ children }: { children: ReactNode }) {
                   className={({ isActive }) =>
                     cx(
                       "relative rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-(--duracao-rapida)",
-                      isActive ? "text-marca-800" : "text-texto-suave hover:text-texto",
+                      isActive ? "text-marca-contraste" : "text-texto-suave hover:text-texto",
                     )
                   }
                 >
@@ -82,7 +82,7 @@ export function Layout({ children }: { children: ReactNode }) {
                         <motion.span
                           layoutId="indicador-aba-desktop"
                           transition={transicaoIndicador}
-                          className="absolute inset-0 -z-10 rounded-lg bg-marca-50"
+                          className="absolute inset-0 -z-10 rounded-lg bg-marca-suave"
                         />
                       )}
                       {rotulo}
@@ -106,7 +106,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 )
               }
             >
-              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-marca-50 text-sm font-bold text-marca-800">
+              <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-marca-suave text-sm font-bold text-marca-contraste">
                 {iniciais(perfil?.nome ?? session?.user.email ?? "?")}
               </span>
               <span className="hidden max-w-40 truncate text-sm font-medium text-texto md:inline">

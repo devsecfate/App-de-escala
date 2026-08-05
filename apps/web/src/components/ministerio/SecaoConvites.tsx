@@ -269,11 +269,11 @@ export function SecaoConvites({
         }
       >
         {recemCriado && (
-          <div className="rounded-cartao border border-marca-200 bg-marca-50 px-4 py-5 text-center">
-            <p className="font-mono text-3xl font-bold tracking-[0.2em] text-marca-800">
+          <div className="rounded-cartao border border-marca-600/30 bg-marca-suave px-4 py-5 text-center">
+            <p className="font-mono text-3xl font-bold tracking-[0.2em] text-marca-contraste">
               {formatarCodigoConvite(recemCriado.codigo)}
             </p>
-            <p className="mt-2 text-sm text-marca-800/80">
+            <p className="mt-2 text-sm text-marca-contraste/80">
               Vale até {formatarData(recemCriado.expiraEm)} · {recemCriado.usosMax}{" "}
               {recemCriado.usosMax === 1 ? "uso" : "usos"}
             </p>

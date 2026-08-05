@@ -14,6 +14,36 @@
     <meta name="apple-mobile-web-app-title" content="Escala" />
 
     <title>App de Escala</title>
+
+    <!--
+      Tema aplicado ANTES da primeira pintura.
+
+      Se isto ficasse só no React, o app pintaria branco e escureceria no
+      instante seguinte — um flash que incomoda mais no escuro, justamente de
+      noite, que é quando a pessoa liga o tema. Por isso o script é embutido e
+      síncrono: ele roda antes de o navegador desenhar qualquer coisa.
+
+      Mantenha em sincronia com `src/lib/tema.ts` (a chave e os dois valores de
+      cor da barra).
+    -->
+    <script>
+      (function () {
+        try {
+          var guardada = localStorage.getItem("escala:tema");
+          var seguirSistema = guardada !== "claro" && guardada !== "escuro";
+          var escuro = seguirSistema
+            ? window.matchMedia("(prefers-color-scheme: dark)").matches
+            : guardada === "escuro";
+
+          document.documentElement.dataset.tema = escuro ? "escuro" : "claro";
+
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute("content", escuro ? "#0b1220" : "#0f766e");
+        } catch (erro) {
+          document.documentElement.dataset.tema = "claro";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

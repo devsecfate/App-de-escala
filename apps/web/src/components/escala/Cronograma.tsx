@@ -128,7 +128,7 @@ export function Cronograma({
                 className="rounded-cartao border border-borda bg-superficie p-4 shadow-cartao"
               >
                 <div className="flex items-start gap-3">
-                  <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-marca-50 text-sm font-bold text-marca-800">
+                  <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-marca-suave text-sm font-bold text-marca-contraste">
                     {indice + 1}
                   </span>
 

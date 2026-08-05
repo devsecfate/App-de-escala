@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Alerta, Botao, Card } from "./ui";
 import { removerInscricaoPush, salvarInscricaoPush } from "@escala-app/core";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../context/AuthContext";
@@ -102,30 +103,30 @@ export function AtivarAvisos() {
   }
 
   return (
-    <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <p className="text-sm font-medium text-slate-900">Avisos no celular</p>
-          <p className="text-sm text-slate-500">
+    <Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-medium text-texto">Avisos no celular</p>
+          <p className="mt-0.5 text-sm text-texto-suave">
             {inscrito
               ? "Você recebe um lembrete na véspera de cada escala."
               : "Receba um lembrete na véspera de cada escala."}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={ocupado}
+        <Botao
+          tamanho="pequeno"
+          variante={inscrito ? "secundario" : "primario"}
+          carregando={ocupado}
           onClick={() => void (inscrito ? handleDesativar() : handleAtivar())}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium disabled:opacity-50 ${
-            inscrito
-              ? "border border-slate-300 text-slate-700 hover:bg-slate-50"
-              : "bg-slate-900 text-white hover:bg-slate-800"
-          }`}
         >
-          {ocupado ? "..." : inscrito ? "Desativar" : "Ativar"}
-        </button>
+          {inscrito ? "Desativar" : "Ativar"}
+        </Botao>
       </div>
-      {erro && <p className="mt-2 text-sm text-red-600">{erro}</p>}
-    </div>
+      {erro && (
+        <Alerta className="mt-3" tipo="erro">
+          {erro}
+        </Alerta>
+      )}
+    </Card>
   );
 }

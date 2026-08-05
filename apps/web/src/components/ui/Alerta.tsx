@@ -8,7 +8,7 @@ const ESTILOS: Record<TipoAlerta, { classe: string; Icone: typeof Info }> = {
   erro: { classe: "border-perigo/30 bg-perigo-suave text-perigo-forte", Icone: XCircle },
   sucesso: { classe: "border-sucesso/30 bg-sucesso-suave text-sucesso-forte", Icone: CheckCircle2 },
   aviso: { classe: "border-atencao/30 bg-atencao-suave text-atencao-forte", Icone: AlertTriangle },
-  info: { classe: "border-marca-200 bg-marca-50 text-marca-800", Icone: Info },
+  info: { classe: "border-marca-600/30 bg-marca-suave text-marca-contraste", Icone: Info },
 };
 
 /**

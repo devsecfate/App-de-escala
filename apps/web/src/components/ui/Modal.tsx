@@ -90,7 +90,7 @@ export function Modal({
             animate="visivel"
             exit="saindo"
             onClick={aoFechar}
-            className="absolute inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+            className="absolute inset-0 bg-veu backdrop-blur-[2px]"
           />
 
           <motion.div

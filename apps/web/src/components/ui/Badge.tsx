@@ -7,7 +7,7 @@ export type TomBadge = "neutro" | "marca" | "sucesso" | "atencao" | "perigo";
 
 const TONS: Record<TomBadge, string> = {
   neutro: "bg-superficie-suave text-texto-suave",
-  marca: "bg-marca-50 text-marca-800",
+  marca: "bg-marca-suave text-marca-contraste",
   sucesso: "bg-sucesso-suave text-sucesso-forte",
   atencao: "bg-atencao-suave text-atencao-forte",
   perigo: "bg-perigo-suave text-perigo-forte",
